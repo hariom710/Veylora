@@ -1,0 +1,111 @@
+# Implementation Status
+
+## Phase 0 — Repository audit
+Status: complete
+- Repo: empty (greenfield).
+- Toolchain: rustc/cargo 1.99.0, node v22.21.1, npm 11.11.0, git present. pnpm and tauri CLI missing (not needed for Phase 1). MSVC linker libs incomplete in env; `vcvars64` env + `msvcrt.lib` from VS 18 required to link.
+- Nonce policy: HKDF(file-key, "nonce", chunk_index) → 24 bytes (deterministic).
+- Docs created: ARCHITECTURE.md, CRYPTO_DESIGN.md, IMPLEMENTATION_STATUS.md.
+
+## Phase 1 — Cryptographic foundation
+Status: complete
+Modules under src-tauri/src/:
+  crypto/mod.rs     — shared types, CryptoError (typed, never silent), Result
+  crypto/mvk.rs     — Mvk (32B, OS CSPRNG via getrandom), SecretKey, zeroize on drop
+  crypto/kdf.rs     — Argon2id PIN (m=64 MiB) & Password (m=256 MiB), t=3, p=1, salt=32B
+  crypto/hkdf.rs    — derive_subkey(key, label); derive_subkey_info(key, label, info);
+                      frozen labels only; empty/unknown rejected
+  crypto/wrap.rs    — wrap_mvk/unwrap_mvk (XChaCha20-Poly1305, per-entry AAD)
+  crypto/recovery.rs — recovery-key generation (256-bit CSPRNG), base32 + SHA-256 checksum
+  vault/mod.rs      — VaultMeta (versioned serde_json): PIN/password/recovery wrapped MVK copies,
+                      add/unwrap entry points, version check on deserialize
+
+Tests (tests/integration.rs, tests/vectors.rs): all pass.
+Positive: MVK gen 32B/differs; Argon2id PIN+Password deterministic + salt-sensitive;
+HKDF deterministic + label-separated; wrap/unwrap round-trip PIN/password/recovery;
+recovery encode/decode round-trip; VaultMeta serialize/deserialize round-trip;
+committed test vectors (Argon2id-PIN, Argon2id-Password, HKDF for all 6 labels).
+Negative: wrong PIN → typed Aead/UnwrapFailed error; wrong recovery key → typed error;
+tampered ciphertext byte → typed error; tampered AAD → typed error; empty/unknown
+HKDF label → typed error; recovery single-char mutation → checksum/base32 error;
+wrong length → InvalidRecoveryKey; wrong VaultMeta version → UnsupportedVersion.
+Committed vectors: tests/vectors.rs (3 tests).
+
+## Phase 2 — Encrypted file format
+Status: complete
+Modules under src-tauri/src/storage/format/:
+  mod.rs      — CHUNK_SIZE=65536, MAGIC="VYLR", VERSION=1, FormatError, FileKey
+  header.rs   — header write/read + AEAD (header core encrypted, AAD over magic+version)
+  chunk.rs    — chunk encrypt/decrypt with per-chunk nonce + AAD
+  finalize.rs — finalize record write/read + AEAD (root_hash || total_length || total_chunks)
+  reader.rs   — read_range (random-access), verify_file (full authentication)
+  writer.rs   — write_file (streaming writer), write_file_bytes convenience
+
+Format v1 FROZEN (see docs/CRYPTO_DESIGN.md). All 29 lib tests pass, including:
+Positive: 1-byte, 65536-byte, 65537-byte, 10 MiB round-trips; random-access ranges;
+multi-chunk spans; same-chunk ranges; empty range; verify_file on clean file.
+Negative (all return typed errors): tampered chunk ciphertext; reordered chunks;
+duplicated chunk; truncated (last 100 bytes); truncated (middle chunk);
+cross-file substitution; tampered header ciphertext; tampered header AAD;
+wrong file key.
+1 GiB test: #[ignore]d, present and compiles; runs via `cargo test -- --ignored`.
+
+Deferred: AeadInPlace → AeadInOut migration (aead 0.6 deprecation, accepted for now).
+
+## Phase 3 — Storage & database
+Status: complete
+Modules under src-tauri/src/:
+  storage/mod.rs      — module re-exports
+  storage/vault_dir.rs — VaultDir struct: vault.meta, vault.db, blobs/ paths;
+                        create_layout(), ensure_dirs(), fsync_dir()
+  storage/blob.rs     — write_blob, read_blob, delete_blob, list_blobs,
+                        cleanup_tmp_files; atomic write pattern (temp → fsync → rename → fsync_dir)
+  storage/crash.rs    — startup_scan: orphaned tmp cleanup, SQLite integrity check
+  database/mod.rs     — Db wrapper around rusqlite::Connection; WAL mode,
+                        synchronous=FULL, migrations on open
+  database/schema.rs  — MIGRATION_V1: 6 tables (vaults, folders, encrypted_files,
+                        favorites, application_settings, backup_history) + schema_migrations
+  database/crypto.rs  — encrypt_meta/decrypt_meta: XChaCha20-Poly1305 with metadata-key,
+                        random 24B nonce per column, AAD = table || row_id_LE || column
+  database/files.rs   — insert_file, get_file, list_files, rename_file, delete_file,
+                        move_file; FileRecord with encrypted filename/timestamps
+  database/folders.rs — insert_folder, get_folder, list_children, rename_folder;
+                        FolderRecord with encrypted name/created_at
+
+Tests: 66 lib tests pass, including:
+Positive: atomic write round-trip (create_new with retry); random-access chunk read; DB open + migrate;
+insert/get file with encrypted filename; insert/get folder; rename file/folder;
+move file between folders; delete file; list files by folder; list child folders;
+metadata encryption: different nonces → different ciphertext, same plaintext;
+AAD binding: tampered row_id → AEAD failure; wrong key → AEAD failure;
+plaintext filename not found in vault.db raw bytes (verified via grep).
+Negative: tampered chunk → typed error; tampered header → typed error; wrong file key → typed error;
+duplicate file_id → DuplicateBlobName error; wrong metadata_key → typed error;
+truncated file → TooSmall/FinalizeAuth error; cross-file substitution → ChunkAuth error;
+corrupt vault.db → IntegrityFailed error.
+Power-loss simulation: injected Read failure mid-write → no final file, orphaned
+.veylora-tmp-* exists, startup_scan removes it, subsequent write with same file_id
+succeeds.
+fsync_dir on normal directory returns Ok(()) on Windows (degraded to NTFS journal durability).
+Deferred: AeadInPlace → AeadInOut migration (aead 0.6 deprecation, accepted for now).
+Windows durability: fsync_dir uses FILE_FLAG_BACKUP_SEMANTICS + FlushFileBuffers.
+FlushFileBuffers requires SeBackupPrivilege (error code 5 on regular users); returns
+success on ERROR_ACCESS_DENIED since NTFS journaling guarantees rename atomicity.
+Any other error code from FlushFileBuffers is returned as io::Error. File-level
+sync_all always succeeds and guarantees blob content durability before rename.
+Docs/CRYPTO_DESIGN.md has a "Durability" section documenting this strategy.
+
+## Phase 4 — Auth, sessions, IPC
+Status: not started (blocked on Phase 3)
+
+## Phase 5 — Protected streaming
+Status: not started (blocked on Phase 4)
+
+## Phase 6 — Frontend
+Status: not started (blocked on Phase 5)
+
+## Phase 7 — Backup & restore
+Status: not started (blocked on Phase 6)
+
+## Phase 8 — Windows release
+Status: not started (blocked on Phase 7)
