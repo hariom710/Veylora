@@ -30,12 +30,12 @@ const THRESHOLDS: [(u64, i64); 4] = [
 /// Check if the vault is currently locked out. Returns Some(Instant) when
 /// the lockout expires, or None if no lockout is active.
 pub fn check_locked(db: &Db, vault_id: u64) -> Option<Instant> {
-    let row: Option<(i64,)> = db
+    let row: Option<i64> = db
         .conn()
         .query_row(
             "SELECT locked_until_unix FROM auth_attempts WHERE vault_id = ?1",
             rusqlite::params![vault_id],
-            |row| row.get(0),
+            |row| row.get::<_, i64>(0),
         )
         .optional()
         .ok()?;
@@ -63,21 +63,21 @@ pub fn record_failure(db: &Db, vault_id: u64) {
         .as_secs() as i64;
 
     // Get current count
-    let current: Option<(i64,)> = db
+    let current: Option<i64> = db
         .conn()
         .query_row(
             "SELECT failed_count FROM auth_attempts WHERE vault_id = ?1",
             rusqlite::params![vault_id],
-            |row| row.get(0),
+            |row| row.get::<_, i64>(0),
         )
         .optional()
         .ok()
         .flatten();
 
-    let new_count = current.map_or(1, |(c,)| c + 1);
+    let new_count = current.map_or(1, |c| c + 1);
     let lockout_seconds = THRESHOLDS
         .iter()
-        .find(|(threshold, _)| new_count >= *threshold)
+        .find(|(threshold, _)| new_count >= (*threshold as i64))
         .map(|(_, secs)| *secs)
         .unwrap_or(LOCKOUT_MAX);
 

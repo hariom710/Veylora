@@ -9,7 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH, Duration};
 use crate::auth::session::SessionManager;
 
 /// Spawn a background thread that periodically checks if the session has been
-//! idle too long and locks the vault if so.
+/// idle too long and locks the vault if so.
 ///
 /// Checks every 30 seconds. The `timeout_secs` parameter is the idle timeout
 /// in seconds (default 300 = 5 minutes).

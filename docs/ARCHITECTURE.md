@@ -48,6 +48,29 @@ SQLite runs in WAL mode with `synchronous=FULL`.
 2. The frontend never performs cryptography. All AEAD, KDF, HKDF, and RNG happen in Rust.
 3. Plaintext bytes only leave Rust through the `vault://` protocol, scoped to an authenticated session, for exact byte ranges only. No temp files, no disk cache, no plaintext in `AppData`.
 
+## Session Lifecycle
+
+```
+┌─────────┐    Unlock     ┌──────────┐    Auto-lock/Lock    ┌─────────┐
+│ Locked  │ ─────────────►│ Unlocked │ ───────────────────► │ Locked  │
+└─────────┘               └──────────┘                       └─────────┘
+     ▲                                              │
+     │                                              │
+     └──────────────────────────────────────────────┘
+                    MVK zeroized on lock
+```
+
+**Session states:**
+- **Locked**: No session active; MVK is not in memory.
+- **Unlocked**: Session active; MVK is in a `zeroize` buffer.
+
+**Session transitions:**
+- `create`/`unlock`: `Locked` → `Unlocked` (MVK decrypted from `vault.meta` into a zeroizing buffer)
+- `lock`: `Unlocked` → `Locked` (MVK zeroized, session dropped)
+- `auto-lock`: `Unlocked` → `Locked` (after idle timeout, default 5 minutes)
+
+**Zeroization:** The MVK and all derived keys live in `zeroize` buffers and are wiped when the session is dropped (on lock, close, or auto-lock).
+
 ## Module map (`src-tauri/src`)
 
 | Module | Responsibility |

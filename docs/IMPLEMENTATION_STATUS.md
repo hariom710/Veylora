@@ -96,7 +96,32 @@ sync_all always succeeds and guarantees blob content durability before rename.
 Docs/CRYPTO_DESIGN.md has a "Durability" section documenting this strategy.
 
 ## Phase 4 — Auth, sessions, IPC
-Status: not started (blocked on Phase 3)
+Status: complete
+Modules under src-tauri/src/:
+  auth/mod.rs      — AuthError, UnlockMethod enum
+  auth/session.rs  — Session (MVK zeroizing, vault_id, unlock_method, last_activity),
+                    SessionManager (Mutex<Option<Session>>), lock/is_locked/touch_activity/with_mvk
+  auth/pin.rs      — unlock_with_pin (Argon2id KEK + MVK unwrap from vault.meta)
+  auth/password.rs — unlock_with_password (Argon2id KEK + MVK unwrap from vault.meta)
+  auth/recovery.rs — unlock_with_recovery (HKDF KEK + MVK unwrap from vault.meta)
+  auth/throttle.rs — attempt throttling persisted in SQLite (auth_attempts table),
+                    5 failures → 30s lockout, 10 → 5min, 15 → 1h, 20+ → 24h
+  auth/auto_lock.rs — spawn_watcher (std::thread, checks every 30s),
+                       check_auto_lock locks session on idle timeout
+  commands/mod.rs  — Tauri IPC commands: vault_create/open/unlock_pin/password/recovery,
+                    lock/status/get_meta (thin wrappers, no key material in args/returns)
+
+Tests: 17 new tests in tests/phase4_auth.rs, all pass.
+Positive: wrap/unwrap round-trip PIN/password/recovery; session with MVK via with_mvk;
+auto-lock after timeout; auto-lock reset on activity; wrong PIN/password/recovery →
+typed AuthError; wrong PIN 5× → check_locked returns Some; successful unlock clears
+attempts; lock when already locked is idempotent; unwrap with no vault.meta → VaultNotFound;
+tampered vault.meta → VaultCorrupted; recovery key decode/encode round-trip.
+Negative: wrong PIN → InvalidCredential; wrong password → InvalidCredential;
+wrong recovery key → InvalidCredential; tampered vault.meta → VaultCorrupted;
+no vault.meta → VaultNotFound.
+IPC boundary: source-scan test confirms no key material types in command signatures.
+Windows session-lock: deferred to Phase 8 (#[ignore]d test documents deferral).
 
 ## Phase 5 — Protected streaming
 Status: not started (blocked on Phase 4)

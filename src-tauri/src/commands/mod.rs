@@ -101,7 +101,7 @@ pub fn vault_create(
 
     Ok(VaultInfo {
         name: path.clone(),
-        path,
+        path: path.clone(),
         vault_id,
     })
 }
@@ -127,7 +127,7 @@ pub fn vault_open(
 
     Ok(VaultInfo {
         name: path.clone(),
-        path,
+        path: path.clone(),
         vault_id,
     })
 }
@@ -222,7 +222,7 @@ pub fn vault_unlock_recovery(
     }
 
     let recovery_bytes = crate::crypto::recovery::decode_recovery_key(&recovery_key)
-        .map_err(|_| AuthError::InvalidCredential)?;
+        .map_err(|e| e.to_string())?;
 
     match crate::auth::recovery::unlock_with_recovery(std::path::Path::new(&path), &recovery_bytes) {
         Ok(new_session) => {
@@ -282,7 +282,7 @@ pub fn vault_get_meta(
         .unwrap_or_else(|_| "null".to_string());
 
     Ok(VaultPublicMeta {
-        name: path,
+        name: path.clone(),
         path,
         version: meta.version,
         kdf_params_public: kdf_params,

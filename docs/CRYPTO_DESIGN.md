@@ -264,6 +264,59 @@ even without directory flush. Any other error code from `FlushFileBuffers` is
 returned as an `io::Error` so unexpected failure modes surface rather than
 being silently absorbed.
 
+## Authentication and Session Management
+
+### Session Lifecycle
+
+A `Session` object holds the Master Vault Key (MVK) in a `zeroize` buffer,
+along with the vault ID, unlock method, and last-activity timestamp. A
+`SessionManager` (backed by a `Mutex<Option<Session>>`) owns at most one
+active session at a time.
+
+**Session states:**
+- **Locked**: No session active; MVK is not in memory.
+- **Unlocked**: Session active; MVK is in a zeroizing buffer.
+
+**State transitions:**
+- `create`/`unlock`: `Locked` → `Unlocked` (MVK decrypted from vault.meta into zeroizing buffer)
+- `lock`: `Unlocked` → `Locked` (MVK zeroized, session dropped)
+- `auto-lock`: `Unlocked` → `Locked` (after idle timeout)
+
+**Zeroization:** The MVK and all derived keys are stored in `zeroize` buffers and are wiped when the session is dropped (on lock, close, or auto-lock).
+
+### Authentication Flow
+
+1. Load `vault.meta` and parse wrapped MVK entries
+2. Derive KEK from credential (PIN/password via Argon2id, recovery via HKDF)
+3. Unwrap MVK via XChaCha20-Poly1305 AEAD
+4. Verify MVK length (32 bytes)
+5. Construct Session holding zeroized MVK
+6. On success: clear attempt counter for this vault
+
+### Attempt Throttling
+
+Failed authentication attempts are persisted in the `attempts` table of `vault.db` (migration v2), so they survive process restarts.
+
+**Policy:**
+
+| Failures | Lockout Duration |
+|----------|-----------------|
+| 5 | 30 seconds |
+| 10 | 5 minutes (300 seconds) |
+| 15 | 1 hour (3600 seconds) |
+| 20+ | 24 hours (86400 seconds) |
+
+The counter resets to 0 on successful unlock. The `locked_until_unix` timestamp in `attempts` determines when the lockout expires.
+
+### Auto-Lock
+
+The session auto-locks after a configurable idle period (default: 5 minutes / 300 seconds). A background thread checks idle time every 30 seconds and calls `lock()` if idle time exceeds the threshold. Locking zeroizes the MVK and drops the session.
+
+### Recovery Unlock
+
+Recovery unlock uses HKDF (label `veylora/v1/recovery-wrap`), not Argon2id, since recovery keys already have 256 bits of entropy. Recovery unlock follows the same session lifecycle as PIN/password unlock.
+
+
 ## Threat model
 
 ### In scope
