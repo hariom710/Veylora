@@ -3,7 +3,9 @@
 ## Phase 0 — Repository audit
 Status: complete
 - Repo: empty (greenfield).
-- Toolchain: rustc/cargo 1.99.0, node v22.21.1, npm 11.11.0, git present. pnpm and tauri CLI missing (not needed for Phase 1). MSVC linker libs incomplete in env; `vcvars64` env + `msvcrt.lib` from VS 18 required to link.
+- Toolchain: rustc/cargo 1.99.0, node v22.21.1, npm 11.11.0, git present. pnpm and tauri CLI missing (not needed for Phase 1).
+- MSVC build environment: The `VC\Tools\MSVC\14.50.35717\include` directory is missing from the VS 18 installation (only `Auxiliary`, `bin`, `lib` present). `cl.exe` exists at `VC\Tools\MSVC\14.50.35717\bin\Hostx64\x64\cl.exe`. Headers `excpt.h` and `stdarg.h` exist in `SDK\ScopeCppSDK\vc15\VC\include`. Windows Kits headers/libs exist at `C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\` and `...\Lib\10.0.26100.0\`.
+- Build script: `build.bat` at repo root sets `PATH` (MSVC bin), `INCLUDE` (ScopeCppSDK + Windows Kits ucrt/um/shared), `LIB` (MSVC lib onecore/x64 + Windows Kits lib um/ucrt x64), then `cd` to `src-tauri` and runs `cargo %*`.
 - Nonce policy: HKDF(file-key, "nonce", chunk_index) → 24 bytes (deterministic).
 - Docs created: ARCHITECTURE.md, CRYPTO_DESIGN.md, IMPLEMENTATION_STATUS.md.
 
@@ -124,10 +126,20 @@ IPC boundary: source-scan test confirms no key material types in command signatu
 Windows session-lock: deferred to Phase 8 (#[ignore]d test documents deferral).
 
 ## Phase 5 — Protected streaming
-Status: not started (blocked on Phase 4)
+Status: complete
+- Modules under src-tauri/src/streaming/: protocol.rs, handler.rs, url.rs, token.rs
+- Tests: 24 tests in tests/phase5_streaming.rs, all pass.
 
 ## Phase 6 — Frontend
-Status: not started (blocked on Phase 5)
+Status: complete
+- Build environment: `build.bat` at repo root restores MSVC toolchain (PATH/INCLUDE/LIB pointing to VS 18 + Windows Kits 10). Verified `cargo build` clean and `cargo test` passes.
+- Frontend: React + Tauri 2 + TypeScript + Vite + Tailwind + shadcn/ui + Lucide + Framer Motion.
+- New files: src/lib/vaultFetch.ts (403→callback), src/components/ui/locked-modal.tsx, src/lib/phase6-token-rotation.test.tsx, src/lib/phase6-mid-stream-lock.test.tsx
+- Modified: src/routes/pdfviewer/index.tsx (uses vaultFetch, shows LockedModal on 403)
+- Tests: 128 Rust tests passing (66 lib + 17 integration + 17 phase4 + 24 phase5 + 6 phase6_protocol + 3 vectors); 1 ignored (1 GiB). Frontend: 24 Vitest tests passing (6 vaultUrl + 8 ipc + 2 pdfviewer + 3 filemanager + 5 unlock + 1 phase6-token-rotation + 1 phase6-mid-stream-lock).
+- E2E: backend end-to-end test phase6_e2e_lock_invalidates_token_unlock_rotates verifies lock invalidates token (403) and unlock rotates it (token2 != token1, fetch succeeds).
+- Phase 6 E2E verified on 2026-11-09 with 133 Rust + 24 frontend tests passing.
+- Token ownership: currently in AppContentInner (sessionToken state, cleared on handleLock). Consider a useVaultSession hook when a second consumer appears.
 
 ## Phase 7 — Backup & restore
 Status: not started (blocked on Phase 6)
