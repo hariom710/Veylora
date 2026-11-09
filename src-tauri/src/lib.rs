@@ -10,5 +10,6 @@ pub mod auth;
 pub mod commands;
 pub mod crypto;
 pub mod database;
+pub mod streaming;  // Phase 5: vault:// protocol, URL parsing, token management
 pub mod storage;
 pub mod vault;

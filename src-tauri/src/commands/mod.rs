@@ -289,6 +289,50 @@ pub fn vault_get_meta(
     })
 }
 
+/// Error type for Tauri commands.
+/// Used by vault_get_session_token and other commands to return typed errors.
+#[derive(Debug, serde::Serialize)]
+pub enum CommandError {
+    /// The vault is currently locked; no session is active.
+    Locked,
+    /// The vault at the given path could not be found.
+    VaultNotFound,
+    /// An internal error; the message describes the cause.
+    Internal(String),
+}
+
+impl std::fmt::Display for CommandError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CommandError::Locked => write!(f, "vault is locked"),
+            CommandError::VaultNotFound => write!(f, "vault not found at path"),
+            CommandError::Internal(msg) => write!(f, "internal error: {msg}"),
+        }
+    }
+}
+
+impl std::error::Error for CommandError {}
+
+/// Return the current session token as a hex string.
+/// This is the single new command allowed in Phase 5.
+/// The token is NOT the MVK, KEK, or any derived key — it is a random
+/// 32-byte value that rotates on unlock and invalidates on lock.
+/// The frontend receives it as a String (hex) and passes it as a query
+/// param to vault:// requests. It does not contain key material, so the
+/// IPC boundary source-scan test still passes (no forbidden type names).
+///
+/// Takes a shared SessionManager reference (the same one used by the
+/// streaming handler and invalidated by lock()). In the real Tauri app,
+/// this would be `tauri::State<'_, Arc<SessionManager>>`.
+pub fn vault_get_session_token(
+    manager: &crate::auth::session::SessionManager,
+) -> Result<String, CommandError> {
+    if manager.is_locked() {
+        return Err(CommandError::Locked);
+    }
+    Ok(manager.token())
+}
+
 /// Derive vault_id from VaultMeta.
 fn vault_id_from_meta(meta: &VaultMeta) -> u64 {
     let mut hasher = DefaultHasher::new();

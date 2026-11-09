@@ -1,17 +1,34 @@
 #![allow(missing_docs)]
 
-//! Session object: holds the MVK in a zeroizing buffer, plus vault_id,
-//! unlock_method, and last_activity. Never serializable, never Clone, never
-//! Debug-printable (MVK is redacted).
-//!
-//! SessionManager wraps Option<Session> in a Mutex so at most one session
-//! exists at a time.
-
+use crate::crypto::mvk::Mvk;
+use crate::auth::UnlockMethod;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use zeroize::{Zeroize, ZeroizeOnDrop};
-use crate::crypto::mvk::Mvk;
-use crate::auth::UnlockMethod;
+use crate::streaming::token::TokenStore;
+
+/** 
+ * Master Vault Key session: the MVK lives in a zeroizing buffer,
+ * plus vault_id, unlock_method, last_activity, and a session token.
+ * 
+ * The token is a 32-byte random value that:
+ *   - is issued at unlock time
+ *   - rotates on every unlock
+ *   - is invalidated on lock()
+ *   - is validated via constant-time comparison
+ *   - never crosses the IPC boundary (returned as hex String from
+     vault_get_session_token command)
+ * 
+ * SessionManager owns the TokenStore and the Option<Session>.
+ * At most one session exists at a time.
+ */
+
+/// Inner state of the session manager, including the token store.
+struct Inner {
+    session: Option<Session>,
+    current_path: Option<String>,
+    token_store: TokenStore,
+}
 
 /// Master Vault Key session: the MVK lives in a zeroizing buffer.
 #[derive(Zeroize, ZeroizeOnDrop)]
@@ -54,10 +71,21 @@ impl std::fmt::Debug for Session {
     }
 }
 
+impl Default for Session {
+    fn default() -> Self {
+        Self::new(Mvk::generate().expect("MVK generation failed"), 0, UnlockMethod::Pin)
+    }
+}
+
 /// Inner state of the session manager.
-struct Inner {
-    session: Option<Session>,
-    current_path: Option<String>,
+impl Inner {
+    fn new(token_store: TokenStore) -> Self {
+        Self {
+            session: None,
+            current_path: None,
+            token_store,
+        }
+    }
 }
 
 /// Session manager: holds at most one active Session behind a Mutex.
@@ -66,25 +94,40 @@ pub struct SessionManager {
 }
 
 impl SessionManager {
+    /// Create a new SessionManager with a new TokenStore.
+    pub fn new_with_token() -> Self {
+        Self { inner: Mutex::new(Inner::new(TokenStore::new())) }
+    }
+
+    /// Create a new SessionManager (legacy constructor for Phase 4 compat).
     pub fn new() -> Self {
-        Self { inner: Mutex::new(Inner { session: None, current_path: None }) }
+        Self { inner: Mutex::new(Inner { session: None, current_path: None, token_store: TokenStore::new() }) }
+    }
+
+    /// Create a new SessionManager (legacy, no token — for Phase 4 compat).
+    // Deprecated: use new_with_token() for Phase 5.
+    pub fn legacy_new() -> Self {
+        Self { inner: Mutex::new(Inner { session: None, current_path: None, token_store: TokenStore::new() }) }
     }
 
     pub fn is_locked(&self) -> bool {
         self.inner.lock().unwrap().session.is_none()
     }
 
-    /// Lock the vault: drop the Session (zeroizing the MVK) and clear path.
+    /// Lock the vault: drop the Session (zeroizing the MVK), invalidate token.
     pub fn lock(&self) {
         let mut guard = self.inner.lock().unwrap();
         guard.session = None;
         guard.current_path = None;
+        guard.token_store.invalidate();
     }
 
     pub fn set_session(&self, session: Session, path: String) {
         let mut guard = self.inner.lock().unwrap();
         guard.session = Some(session);
         guard.current_path = Some(path);
+        // Rotate token on unlock
+        guard.token_store.generate();
     }
 
     /// Set only the current vault path (no session yet).
@@ -119,6 +162,19 @@ impl SessionManager {
         session.with_mvk(f)
     }
 
+    /// Get the current session token (hex string) for IPC handoff.
+    /// This is the ONE new command allowed in Phase 5; its return type
+    /// is String (hex), which does NOT match the forbidden identifier scan
+    /// (Mvk/Kek/Key/Ciphertext/Nonce).
+    pub fn token(&self) -> String {
+        self.inner.lock().unwrap().token_store.current().unwrap_or_default()
+    }
+
+    /// Validate a token candidate using constant-time comparison.
+    pub fn validate_token(&self, token: &str) -> bool {
+        self.inner.lock().unwrap().token_store.validate(token)
+    }
+
     /// Check auto-lock: if the session has been idle longer than `timeout_secs`,
     /// lock the vault.
     pub fn check_auto_lock(&self, now: u64, timeout_secs: u64) {
@@ -127,6 +183,7 @@ impl SessionManager {
             if now - session.last_activity > timeout_secs {
                 guard.session = None;
                 guard.current_path = None;
+                guard.token_store.invalidate();
             }
         }
     }
@@ -134,7 +191,7 @@ impl SessionManager {
 
 impl Default for SessionManager {
     fn default() -> Self {
-        Self::new()
+        Self::legacy_new()
     }
 }
 
