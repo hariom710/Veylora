@@ -21,6 +21,7 @@ typenum = "1"
 rusqlite = { version = "0.33", features = ["bundled"] }
 subtle = "2"
 tauri = "2"
+tauri-plugin-dialog = "2"
 
 [build-dependencies]
 tauri-build = "2"

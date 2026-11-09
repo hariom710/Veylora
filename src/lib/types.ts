@@ -51,3 +51,22 @@ export type CommandError =
   | { type: 'Locked' }
   | { type: 'VaultNotFound' }
   | { type: 'Internal'; message: string };
+
+export interface BackupInfo {
+  path: string;
+  file_count: number;
+  total_size: number;
+  created_at_unix: number;
+  verified_fields: string[];
+}
+
+export interface RestoreInfo {
+  files_restored: number;
+  bytes_written: number;
+}
+
+export interface BackupHistoryEntry {
+  path: string;
+  status: string;
+  created_at_unix: number;
+}

@@ -13,6 +13,8 @@ use veylora::commands::{
     vault_unlock_recovery, vault_lock, vault_status, vault_get_meta,
     vault_get_session_token, CommandError,
     VaultInfo, UnlockResult, StatusInfo, VaultPublicMeta,
+    vault_backup_create, vault_backup_verify, vault_backup_restore,
+    vault_backup_history, BackupInfo, RestoreInfo, BackupHistoryEntry,
 };
 
 #[tauri::command]
@@ -86,10 +88,42 @@ fn vault_unlock_recovery_cmd(
     veylora::commands::vault_unlock_recovery(recovery_key, state.inner().clone())
 }
 
+#[tauri::command]
+fn vault_backup_create_cmd(
+    dest_path: String,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<veylora::commands::BackupInfo, String> {
+    veylora::commands::vault_backup_create(dest_path, state.inner().clone())
+}
+
+#[tauri::command]
+fn vault_backup_verify_cmd(
+    backup_path: String,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<veylora::commands::BackupInfo, String> {
+    veylora::commands::vault_backup_verify(backup_path, state.inner().clone())
+}
+
+#[tauri::command]
+fn vault_backup_restore_cmd(
+    backup_path: String,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<veylora::commands::RestoreInfo, String> {
+    veylora::commands::vault_backup_restore(backup_path, state.inner().clone())
+}
+
+#[tauri::command]
+fn vault_backup_history_cmd(
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<Vec<veylora::commands::BackupHistoryEntry>, String> {
+    veylora::commands::vault_backup_history(state.inner().clone())
+}
+
 fn main() {
     let manager: Arc<SessionManager> = Arc::new(SessionManager::new());
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(manager.clone())
         .register_uri_scheme_protocol("vault", move |_app, request| {
             let current_path = manager.current_path().unwrap_or_default();
@@ -116,6 +150,10 @@ fn main() {
             vault_unlock_pin_cmd,
             vault_unlock_password_cmd,
             vault_unlock_recovery_cmd,
+            vault_backup_create_cmd,
+            vault_backup_verify_cmd,
+            vault_backup_restore_cmd,
+            vault_backup_history_cmd,
         ])
         .run(generate_context!())
         .expect("error while running tauri application");

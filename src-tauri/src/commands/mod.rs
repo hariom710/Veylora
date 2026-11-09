@@ -339,3 +339,165 @@ fn vault_id_from_meta(meta: &VaultMeta) -> u64 {
     meta.hash(&mut hasher);
     hasher.finish()
 }
+
+// ============================================================================
+// Phase 7: Backup / Restore commands
+// ============================================================================
+
+/// Information returned on backup create/verify.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BackupInfo {
+    pub path: String,
+    pub file_count: u64,
+    pub total_size: u64,
+    pub created_at_unix: i64,
+    /// Which regions were cryptographically verified.
+    pub verified_fields: Vec<String>,
+}
+
+/// Information returned on backup restore.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RestoreInfo {
+    pub files_restored: u64,
+    pub bytes_written: u64,
+}
+
+/// History entry from the backup_history table.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BackupHistoryEntry {
+    pub path: String,
+    pub status: String,
+    pub created_at_unix: i64,
+}
+
+/// Open the DB for the vault at `session.current_path()`.
+fn open_db_for_session(session: &SessionManager) -> Result<Db, String> {
+    let path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
+    crate::database::Db::open(&std::path::Path::new(&path).join("vault.db"))
+        .map_err(|e| e.to_string())
+}
+
+/// Get the MVK from the active session.
+fn with_mvk<F, R>(session: &SessionManager, f: F) -> Result<R, String>
+where
+    F: FnOnce(&[u8; 32]) -> R,
+{
+    session.with_mvk(f).map_err(|_| "vault is locked".to_string())
+}
+
+/// Create a backup of the current vault at `dest_path`.
+pub fn vault_backup_create(
+    dest_path: String,
+    session: Arc<SessionManager>,
+) -> Result<BackupInfo, String> {
+    if session.is_locked() {
+        return Err("vault is locked".to_string());
+    }
+
+    let db = open_db_for_session(&session)?;
+    let vdir_path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
+    let vdir = crate::storage::vault_dir::VaultDir::new(std::path::Path::new(&vdir_path).to_path_buf());
+
+    let inner_result = with_mvk(&session, |mvk| {
+        crate::backup::create::create_backup(mvk, &db, &vdir, &dest_path)
+    }).map_err(|e| e.to_string())?;
+
+    let bi = inner_result.map_err(|e| e.to_string())?;
+
+    // Record in backup history.
+    let _ = crate::backup::verify::record_backup_history(
+        &db,
+        &dest_path,
+        "complete",
+        bi.created_at_unix,
+    );
+
+    Ok(BackupInfo {
+        path: bi.path,
+        file_count: bi.file_count,
+        total_size: bi.total_size,
+        created_at_unix: bi.created_at_unix,
+        verified_fields: bi.verified_fields,
+    })
+}
+
+/// Verify a backup container's integrity.
+/// If the session is unlocked, performs full verification (manifest + blobs).
+/// If locked, performs partial verification (trailer structure only).
+pub fn vault_backup_verify(
+    backup_path: String,
+    session: Arc<SessionManager>,
+) -> Result<BackupInfo, String> {
+    let mvk_opt = with_mvk(&session, |mvk| *mvk)
+        .map_err(|e| e.to_string())
+        .ok();
+
+    match mvk_opt {
+        Some(mvk) => {
+            let bi = crate::backup::verify::verify_backup(Some(&mvk), &backup_path)
+                .map_err(|e| e.to_string())?;
+            Ok(BackupInfo {
+                path: bi.path,
+                file_count: bi.file_count,
+                total_size: bi.total_size,
+                created_at_unix: bi.created_at_unix,
+                verified_fields: bi.verified_fields,
+            })
+        }
+        None => {
+            // Session locked — partial verification only.
+            let bi = crate::backup::verify::verify_backup(None, &backup_path)
+                .map_err(|e| e.to_string())?;
+            Ok(BackupInfo {
+                path: bi.path,
+                file_count: bi.file_count,
+                total_size: bi.total_size,
+                created_at_unix: bi.created_at_unix,
+                verified_fields: bi.verified_fields,
+            })
+        }
+    }
+}
+
+/// Restore a backup into the current vault.
+pub fn vault_backup_restore(
+    backup_path: String,
+    session: Arc<SessionManager>,
+) -> Result<RestoreInfo, String> {
+    if session.is_locked() {
+        return Err("vault is locked".to_string());
+    }
+
+    let mut db = open_db_for_session(&session)?;
+    let vdir_path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
+    let vdir = crate::storage::vault_dir::VaultDir::new(std::path::Path::new(&vdir_path).to_path_buf());
+
+    let inner_result = with_mvk(&session, |mvk| {
+        crate::backup::restore::restore_backup(mvk, &mut db, &vdir, &backup_path)
+    }).map_err(|e| e.to_string())?;
+
+    let ri = inner_result.map_err(|e| e.to_string())?;
+
+    Ok(RestoreInfo {
+        files_restored: ri.files_restored,
+        bytes_written: ri.bytes_written,
+    })
+}
+
+/// List backup history from the database.
+pub fn vault_backup_history(
+    session: Arc<SessionManager>,
+) -> Result<Vec<BackupHistoryEntry>, String> {
+    let db = open_db_for_session(&session)?;
+    let entries = crate::backup::verify::list_backup_history(&db)
+        .map_err(|e| e.to_string())?;
+    Ok(entries
+        .into_iter()
+        .map(|e| BackupHistoryEntry {
+            path: e.path,
+            status: e.status,
+            created_at_unix: e.created_at_unix,
+        })
+        .collect())
+}
+

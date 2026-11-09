@@ -221,6 +221,7 @@ No label is reused for two purposes.
 - Offline attacker with copied vault files.
 - Tampering with vault data (modified/reordered/duplicated/truncated chunks).
 - Accidental plaintext leakage via the app (no temp files, no thumbnail caches).
+- Backup/restore tampering (modified/truncated/corrupted .vey containers).
 
 ### Out of scope
 - Kernel-level malware / compromised OS.
@@ -316,6 +317,107 @@ The session auto-locks after a configurable idle period (default: 5 minutes / 30
 
 Recovery unlock uses HKDF (label `veylora/v1/recovery-wrap`), not Argon2id, since recovery keys already have 256 bits of entropy. Recovery unlock follows the same session lifecycle as PIN/password unlock.
 
+
+## Backup Container Format (Phase 7)
+
+### Container layout
+
+A backup container is a single `.vey` file on disk, containing four regions concatenated:
+
+```
+REGION_HEADER   magic || version || backup_nonce || header_payload_len ||
+                header_payload || meta_len || meta_hash || header_tag
+REGION_MANIFEST AEAD-encrypted manifest blob
+REGION_BLOBS    Raw encrypted blob contents (format v1, NOT re-encrypted)
+REGION_TRAILER  trailer_magic || file_count || blobs_hash || final_tag
+```
+
+### Header region
+
+| Field | Size | Value |
+|---|---|---|
+| magic | 4 bytes | `"VYLB"` |
+| format_version | 4 bytes | u32 LE = 1 |
+| backup_nonce | 24 bytes | Random (OS CSPRNG) |
+| header_payload_len | 4 bytes | u32 LE |
+| header_payload | N bytes | AEAD-encrypted (see below) |
+| meta_len | 4 bytes | u32 LE |
+| meta_hash | 32 bytes | SHA-256 of encrypted manifest |
+| header_tag | 16 bytes | AEAD tag |
+
+**Header plaintext** (encrypted, authenticated): `vault_name_len(4) || vault_name(N) || created_at(8)`
+
+**Header AAD**: `"VYLB" || format_version_LE(4)`
+
+**Header AEAD**: `key = backup_key`, `nonce = backup_nonce` (stored plaintext)
+
+### Manifest region
+
+A single AEAD-encrypted blob:
+
+| Field | Size | Value |
+|---|---|---|
+| file_count | 8 bytes | u64 LE |
+| per file: file_id | 16 bytes | The blob name / file_id |
+| per file: encrypted_size | 8 bytes | u32 LE |
+| per file: encryption_ver | 4 bytes | u32 LE |
+| per file: name_len | 4 bytes | u32 LE |
+| per file: name | N bytes | Plaintext filename |
+| per file: created_at | 8 bytes | i64 LE |
+| per file: modified_at | 8 bytes | i64 LE |
+
+**Manifest AAD**: `"VYLB" || format_version_LE || meta_len_LE(4)`
+
+**Manifest nonce**: `derive_subkey_info(backup_key, "veylora/v1/backup-key", "manifest-nonce")` → 24 bytes (subkey, not a new top-level label)
+
+**Manifest AEAD**: `key = backup_key`
+
+### Blob region
+
+Raw encrypted blob contents as written by `storage::blob` (format v1 output, already AEAD-protected with per-file keys derived from MVK). Blobs are **NOT** re-encrypted; the backup is a container only.
+
+### Trailer region
+
+| Field | Size | Value |
+|---|---|---|
+| trailer_magic | 4 bytes | `"VYLT"` |
+| file_count | 8 bytes | u64 LE |
+| blobs_hash | 32 bytes | SHA-256 over concatenation of all blob bytes |
+| final_tag | 16 bytes | AEAD tag |
+
+**Trailer plaintext**: `file_count(8) || blobs_hash(32)`
+
+**Trailer AAD**: `"VYLT" || format_version_LE(4)`
+
+**Trailer nonce**: `derive_subkey_info(backup_key, "veylora/v1/backup-key", "trailer-nonce")` → 24 bytes (subkey)
+
+**Trailer AEAD**: `key = backup_key`
+
+### Backup key derivation
+
+```
+backup_key = HKDF-SHA256(MVK, label = "veylora/v1/backup-key")
+```
+
+The backup is therefore only restorable with the same MVK — intentional for v1. A backup is useless without the credentials that unlock the original vault.
+
+### Binding chain
+
+1. Header AAD binds `format_version` to the container.
+2. Header AEAD authenticates `vault_name` + `created_at` and binds to `meta_len`/`meta_hash`.
+3. `meta_len`/`meta_hash` bind the manifest region to the header.
+4. Manifest AEAD binds `meta_len` (in AAD) and authenticates all file metadata.
+5. Trailer AEAD binds `file_count` + `blobs_hash`.
+6. `blobs_hash` detects truncation/tampering of the blob region.
+7. `file_count` detects manifest-vs-blob-region mismatch.
+
+### Container atomicity
+
+Written to a temp file at the destination directory using `create_new(true)` with retry, then `fsync` + atomic `rename` to the final path, then `fsync_dir` on the parent directory. Any failure leaves no partial final file (orphan temp files may exist and are cleaned by `startup_scan`).
+
+### Restore all-or-nothing
+
+Restore uses a rusqlite transaction for all DB writes. Blobs are written atomically per file. On any failure (wrong MVK, tampered data, duplicate file_id), DB changes are rolled back and any partially-written blob files are removed.
 
 ## Threat model
 

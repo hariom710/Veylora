@@ -155,6 +155,48 @@ export async function vaultGetSessionToken(): Promise<Result<string, CommandErro
   }
 }
 
+export async function vaultBackupCreate(
+  destPath: string,
+): Promise<Result<BackupInfo, CommandError>> {
+  try {
+    const data = await invokeCmd('vault_backup_create_cmd', { dest_path: destPath });
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, error: parseError(e) };
+  }
+}
+
+export async function vaultBackupVerify(
+  backupPath: string,
+): Promise<Result<BackupInfo, CommandError>> {
+  try {
+    const data = await invokeCmd('vault_backup_verify_cmd', { backup_path: backupPath });
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, error: parseError(e) };
+  }
+}
+
+export async function vaultBackupRestore(
+  backupPath: string,
+): Promise<Result<RestoreInfo, CommandError>> {
+  try {
+    const data = await invokeCmd('vault_backup_restore_cmd', { backup_path: backupPath });
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, error: parseError(e) };
+  }
+}
+
+export async function vaultBackupHistory(): Promise<Result<BackupHistoryEntry[], CommandError>> {
+  try {
+    const data = await invokeCmd('vault_backup_history_cmd', {});
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, error: parseError(e) };
+  }
+}
+
 function parseError(e: unknown): CommandError {
   if (typeof e === 'string') {
     if (e === 'vault is locked') return { type: 'Locked' };

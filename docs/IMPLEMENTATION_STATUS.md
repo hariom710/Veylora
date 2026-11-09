@@ -142,7 +142,33 @@ Status: complete
 - Token ownership: currently in AppContentInner (sessionToken state, cleared on handleLock). Consider a useVaultSession hook when a second consumer appears.
 
 ## Phase 7 — Backup & restore
-Status: not started (blocked on Phase 6)
+Status: complete
+- Modules under src-tauri/src/backup/: mod.rs, container.rs, create.rs, restore.rs, verify.rs
+- New commands in commands/mod.rs: vault_backup_create, vault_backup_verify, vault_backup_restore, vault_backup_history
+- Database migration v3: ALTER TABLE backup_history ADD COLUMN backup_size, ADD COLUMN status
+- Frontend: src/routes/backup/index.tsx wired to all four commands; src/lib/ipc.ts has IPC wrappers; src/lib/types.ts has BackupInfo/RestoreInfo/BackupHistoryEntry
+- Tests: 15 tests in tests/phase7_backup.rs (14 non-ignored + 1 ignored 100 MiB), all pass
+  - Test #1: create backup of vault with 3 files → file exists, size > 0, file_count == 3
+  - Test #2: verify created backup → Ok with correct file_count and verified_fields
+  - Test #3: restore into fresh vault → files present, blobs match, DB rows match
+  - Test #4: round-trip create → restore → verify file contents match
+  - Test #5: backup history populated → entry with status "complete"
+  - Test #6: tamper manifest → verify returns Corrupted
+  - Test #7: tamper blob → verify returns Corrupted (blobs_hash mismatch)
+  - Test #8: truncate trailer → verify returns Corrupted
+  - Test #9: swap manifest/different meta_len → header AEAD fails
+  - Test #10: restore with wrong MVK → header AEAD fails, Corrupted
+  - Test #11: restore with existing file_id → BackupError::FileExists, no partial restore
+  - Test #12: restore atomic failure → no DB rows added, all-or-nothing
+  - Test #13: restore while locked → CommandError::Locked
+  - Test #14: create while locked → CommandError::Locked
+  - Test #15 (ignored): 100 MiB file create → verify → restore → read → compare
+- Frontend Vitest: 3 tests in src/lib/phase7-backup.test.tsx (history render, create backup call, corrupted verify error)
+- Container format documented in docs/CRYPTO_DESIGN.md (regions, backup_key derivation, binding chain, all-or-nothing restore)
+- Backup/restore flow diagram documented in docs/ARCHITECTURE.md
+- Format v1 unchanged, 8 frozen HKDF labels unchanged (backup-key already reserved from Phase 2; "manifest-nonce"/"trailer-nonce" are subkey infos, not new labels)
+- No tokio dependency added. Commands are synchronous.
+- tauri-plugin-dialog ADDED: Cargo.toml, main.rs plugin registration, capabilities/default.json, package.json, Backup screen wired with saveDialog/openDialog
 
 ## Phase 8 — Windows release
 Status: not started (blocked on Phase 7)

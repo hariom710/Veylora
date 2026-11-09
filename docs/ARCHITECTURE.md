@@ -93,3 +93,72 @@ SQLite runs in WAL mode with `synchronous=FULL`.
 2. **Import**: frontend streams file bytes via `vault://` upload → Rust encrypts chunks → writes blobs atomically → writes encrypted metadata to SQLite.
 3. **Preview**: frontend requests `vault://file/<id>?range=...` with session token → Rust maps range to chunks → decrypts + authenticates per chunk → streams bytes.
 4. **Lock**: Rust zeroizes MVK + derived keys, invalidates session token, closes outstanding `vault://` streams.
+
+## Backup / Restore Flow
+
+```
+┌─────────────┐     backup_create     ┌─────────────────────┐
+│   Frontend  │ ─────────────────────►│   Rust backup/      │
+│  (Backup UI)│                       │   create::create_   │
+└─────────────┘                       │   backup(mvk, db,   │
+      │                               │   vdir, dest_path)  │
+      │ Load History                  └──────────┬──────────┘
+      │                                          │
+      │      IPC: vault_backup_history           │ Read blobs + metadata
+      │◄────────────────────────────────────────┘
+      │
+      │     IPC: vault_backup_create(dest_path)
+      │─────────────────────────────────────────────►│
+      │                       │ Derive backup_key = HKDF(MVK,
+      │                       │   "veylora/v1/backup-key")
+      │                       │ Build manifest → AEAD encrypt
+      │                       │ Write header || manifest ||
+      │                       │   blobs || trailer
+      │                       │ Atomic: temp → fsync → rename
+      │                       │ Record in backup_history
+      │◄──────────────────────┴─────────────────────────────│
+      │ BackupInfo { path, file_count, total_size, ... }
+
+Restore flow:
+
+```
+┌─────────────┐     backup_restore    ┌─────────────────────┐
+│   Frontend  │ ─────────────────────►│   Rust backup/      │
+│  (Backup UI)│                       │   restore::restore_ │
+└─────────────┘                       │   backup(mvk, db,   │
+      │                               │   vdir, backup_path)│
+      │      Read .vey container      │ Check MVK (locked →   │
+      │                                │   return Locked)    │
+      │                                │ Parse header, verify  │
+      │                                │   header AEAD + meta_hash│
+      │                                │ Decrypt manifest      │
+      │                                │ For each file:        │
+      │                                │   Check file_id exists│
+      │                                │   Read blob, verify   │
+      │                                │     format v1 chain   │
+      │                                │   Write blob atomically│
+      │                                │   Insert DB row       │
+      │                                │ Rusqlite transaction  │
+      │                                │   (all-or-nothing)    │
+      │                                │ Verify trailer        │
+      │◄──────────────────────────────┴─────────────────────────│
+      │ RestoreInfo { files_restored, bytes_written }
+
+Verify flow:
+
+```
+┌─────────────┐     backup_verify     ┌─────────────────────┐
+│   Frontend  │ ─────────────────────►│   Rust backup/      │
+│  (Backup UI)│                       │   verify::verify_   │
+└─────────────┘                       │   backup(mvk_opt,   │
+      │                               │   backup_path)      │
+      │      If session unlocked:     │ Full verification:    │
+      │      decrypt manifest +       │   header AEAD +       │
+      │      verify blobs_hash        │   manifest meta_hash  │
+      │      If session locked:       │   blobs_hash + trailer│
+      │      partial (trailer only)   │   Partial: trailer    │
+      │                                │   structure + blobs_hash│
+      │◄──────────────────────────────┴─────────────────────────│
+      │ BackupInfo { file_count, total_size, ... }
+
+```

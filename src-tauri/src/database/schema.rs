@@ -68,8 +68,18 @@ CREATE TABLE IF NOT EXISTS auth_attempts (
 );
 "#;
 
+/// Migration v3: add backup_size and status columns to backup_history.
+pub const MIGRATION_V3: &str = r#"
+ALTER TABLE backup_history ADD COLUMN backup_size INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE backup_history ADD COLUMN status TEXT NOT NULL DEFAULT 'complete';
+"#;
+
 /// List of all migrations in order.
-pub const MIGRATIONS: &[(&str, &str)] = &[("1", MIGRATION_V1), ("2", MIGRATION_V2)];
+pub const MIGRATIONS: &[(&str, &str)] = &[
+    ("1", MIGRATION_V1),
+    ("2", MIGRATION_V2),
+    ("3", MIGRATION_V3),
+];
 
 use rusqlite::OptionalExtension;
 

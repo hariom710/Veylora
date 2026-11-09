@@ -7,6 +7,7 @@
 //! All key material is zeroized on drop.
 
 pub mod auth;
+pub mod backup;    // Phase 7: backup/restore container
 pub mod commands;
 pub mod crypto;
 pub mod database;
