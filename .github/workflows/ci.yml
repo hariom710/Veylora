@@ -15,6 +15,13 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Ensure frontend dist exists for Tauri config
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          if (-not (Test-Path dist/index.html)) {
+            Set-Content -Path dist/index.html -Value "<!doctype html><title>placeholder</title>"
+          }
+
       - name: Run cargo test (workspace, non-ignored)
         working-directory: ./src-tauri
         run: cargo test --workspace
