@@ -1,9 +1,9 @@
 {
   "productName": "Veylora",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "com.veylora.app",
   "build": {
-    "frontendDist": "../src",
+    "frontendDist": "../dist",
     "beforeDevCommand": "pnpm dev",
     "beforeBuildCommand": "pnpm build"
   },
@@ -27,6 +27,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all"
+    "targets": ["nsis"],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      }
+    }
   }
 }

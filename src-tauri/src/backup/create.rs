@@ -5,7 +5,7 @@ use std::path::Path;
 
 use crate::backup::{container, BackupError, BackupInfo, Result};
 use crate::backup::container::ManifestEntry;
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use crate::database::Db;
 use crate::storage::vault_dir::VaultDir;
 
@@ -160,7 +160,7 @@ pub fn create_backup(
 
     // Write blobs and track hash.
     let mut blobs_hasher = Sha256::new();
-    for ((file_id, blob_data), entry) in blob_data_map.iter().zip(entries.iter()) {
+    for ((_file_id, blob_data), entry) in blob_data_map.iter().zip(entries.iter()) {
         blobs_hasher.update(blob_data);
         writer.write_all(blob_data).map_err(BackupError::Io)?;
         // Verify entry.encrypted_size matches actual size

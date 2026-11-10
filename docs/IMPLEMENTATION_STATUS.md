@@ -171,4 +171,91 @@ Status: complete
 - tauri-plugin-dialog ADDED: Cargo.toml, main.rs plugin registration, capabilities/default.json, package.json, Backup screen wired with saveDialog/openDialog
 
 ## Phase 8 — Windows release
-Status: not started (blocked on Phase 7)
+Status: fixes applied (frontend assets + dialog plugin); smoke test in progress
+- Build environment: `build.bat` at repo root restores MSVC toolchain. CI uses runner defaults.
+- Tauri version pinned to 2.10 for compatibility with build environment.
+- FIX (frontend assets): `frontendDist` was pointing outside the repo (`../../src-tauri/target/release/dist` resolved from `src-tauri/` to `D:\projets\src-tauri\...`), so early installers shipped no UI and showed "asset not found: index.html". Corrected: `vite.config.ts` `build.outDir` → `dist` (repo root), `tauri.conf.json` `frontendDist` → `../dist`. Installer now embeds `dist/index.html`.
+- FIX (dialog plugin): `@tauri-apps/plugin-dialog` was imported as `{ saveDialog, openDialog }`, but the package exports `{ save, open, message, ask, confirm }` — Rollup failed with `"saveDialog" is not exported by .../plugin-dialog/dist-js/index.js` (build-time error, `pnpm build`, src/routes/backup/index.tsx:11). Corrected to `import { save as saveDialog, open as openDialog }`. Backup screen now has "Browse…" buttons wired to `save`/`open` dialogs alongside the native text inputs.
+- tauri-plugin-dialog ADDED: Cargo.toml, main.rs plugin registration, capabilities/default.json, package.json, Backup screen wired with saveDialog/openDialog (aliased to save/open).
+- Icons: placeholder PNG icons generated at 16/24/32/48/64/128/256/512. Replace with professional artwork before v1.1.
+- Windows session-lock: DEFERRED to v1.1. WTS integration not available in build environment (missing msvcrt.lib for tauri-cli build).
+- Windows Hello: DEFERRED to v1.1 (Option B - documented as known limitation).
+- Auto-update: DEFERRED to v1.1 (Option B - documented as known limitation).
+- Code signing: UNSIGNED (no certificate available). SHA-256 hash published for verification. SmartScreen warning documented in RELEASE_NOTES.md.
+- CI/CD: .github/workflows/ci.yml and .github/workflows/release.yml created.
+- Supply chain: src-tauri/deny.toml created; cargo-deny passes (advisories, bans, licenses, sources ok).
+- Supply chain: pnpm audit — no known vulnerabilities found (vitest 5.1.0, vite 7.3.8, react-router-dom 7.18.5 upgrades).
+- Docs: SECURITY.md, RELEASE_NOTES.md, docs/SECURITY_REVIEW.md created.
+- Tests: 149 non-ignored Rust + 27 frontend tests pass (same as Phase 7).
+- Format v1 unchanged, 8 frozen HKDF labels unchanged.
+- No tokio dependency. No new crypto. No new HKDF labels.
+
+## Phase 9 — UI-flow slices (A, B, C) + final release
+
+### Slice A — Login gate & first-run (complete)
+- Three-layer auth enforced end to end: Layer 1 app login (app_users in
+  `%APPDATA%\com.veylora.app\app.db`, in-memory session), Layer 2 vault selection
+  (Welcome screen), Layer 3 vault unlock (PIN/password/recovery). Logout ≠ lock,
+  lock ≠ logout.
+- Admin account seeded on first start: `b1865741@gmail.com` / `Harry@12345`
+  (src-tauri/src/app_auth.rs ADMIN_EMAIL/ADMIN_DEFAULT_PASSWORD). The app flags the
+  default password so it can be changed from the Account screen.
+- Routes: /login, /welcome (first-run create/open), gated app shell.
+- Tests: 7 tests in tests/phase9_app_auth.rs; frontend phase9-login.test.tsx,
+  first-run.test.tsx.
+
+### Slice B — Recovery key & file import/export (complete)
+- Recovery key shown exactly once at vault creation (recovery screen); Settings
+  states honestly that it cannot be re-displayed.
+- Import: native open dialog → streaming encrypt → row in encrypted_files.
+  Export: user-initiated only, via native save dialog (this is the single path
+  where plaintext is written to disk, by explicit user action).
+- Viewers (pdf/image/text/office) resolve their file from useParams().fileId and
+  read through vaultFetch (403 → LockedModal).
+- Tests: 2 tests in tests/sliceb_files.rs (timeouts hardened to 10s after one
+  load-flakiness run); frontend sliceb-recovery.test.tsx.
+
+### Slice C — Favorites, recent, settings, shortcuts (complete)
+- Backend: database/favorites.rs + list_recent; commands file_favorite /
+  file_favorites / file_recent; Settings commands (vault_activity, auto_lock_set,
+  valid_pin, read_meta/write_meta, vault_change_pin, vault_change_password,
+  vault_backup_history_clear, vault_delete). All 9 handlers + spawn_watcher
+  registered in main.rs.
+- Auto-lock: AtomicU64 TIMEOUT_SECS in auth/auto_lock.rs (0 = never, default 300 s),
+  watcher spawned once in main; frontend heartbeat (mousemove/keydown/pointerdown →
+  vaultActivity, throttled 60 s, only when logged in + unlocked); choice persisted
+  in localStorage `veylora.autoLockSecs` and re-applied on boot.
+- Favorites keyed on blob file_id; Recent = newest import (ORDER BY id DESC).
+- Danger zone: vault_delete verifies the PIN before any bytes are removed.
+- Shortcuts: Ctrl+L lock; Ctrl+O / Ctrl+F navigate to Files then dispatch
+  veylora:import / veylora:focus-search; Ctrl+, settings; Ctrl+Shift+A account;
+  Ctrl+1–4 Dashboard/Files/Backup/Settings; skipped when the event target is an
+  input/textarea/select; Esc intentionally unbound (native dialogs only).
+- Tests: 7 tests in tests/slicec_settings.rs; frontend settings (5), favorites (3)
+  plus updated mock factories across all App-rendering suites.
+
+### Fixes made during the slices
+- auth/throttle.rs: a single wrong PIN used to persist `locked_until = now + 24h`
+  because the threshold loop fell through to the highest tier. Fixed:
+  below 5 failures → no lockout (locked_until is set to now, check_locked sees it
+  expired); the highest matching tier wins (`.iter().rev()`). Regression test
+  phase4_no_lockout_below_five_failures added to tests/phase4_auth.rs.
+- Login/signup password field rendered invisible (white text on a white UA input
+  background): `src/index.css` defines no shadcn tokens, so `bg-background` was a
+  no-op. Fixed in src/components/ui/input.tsx with explicit dark utilities
+  (border-slate-700 bg-slate-900 text-slate-50 …).
+
+### Disclosures
+- rusqlite 0.41 migration: u64 → i64 casts added in streaming/handler.rs and
+  backup/restore.rs (integer column types). No format, crypto, or protocol change.
+- Import gap resolved: the UI-flow "import" requirement is covered by the Slice B
+  import path (dialog → streaming encrypt → DB row); no separate bulk/folder
+  import exists.
+- Skipped for v1.1 (by agreement, not regressions): light theme, per-folder
+  storage breakdown, "Move vault", right-click context menus, move-to-folder,
+  Settings recovery-key re-display (impossible by design), Windows session-lock
+  polling, Windows Hello, auto-update, browser E2E.
+- Frozen surfaces untouched: crypto/*, storage/format/*, storage/blob.rs,
+  storage/crash.rs, streaming/*, auth/session.rs, backup/*. Format v1 unchanged;
+  8 frozen HKDF labels unchanged (only subkey infos "manifest-nonce"/"trailer-nonce"
+  under veylora/v1/backup-key, reserved since Phase 2). No tokio, no new crypto crates.

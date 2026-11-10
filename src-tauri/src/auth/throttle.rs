@@ -4,10 +4,10 @@
 //! process restart. Cleared on successful unlock.
 //!
 //! Policy:
-//!   5 failures  → 30s lockout
-//!   10 failures → 5min lockout
-//!   15 failures → 1h lockout
-//!   20+ failures → 24h lockout
+//!   5 failures  Ã¢â€ â€™ 30s lockout
+//!   10 failures Ã¢â€ â€™ 5min lockout
+//!   15 failures Ã¢â€ â€™ 1h lockout
+//!   20+ failures Ã¢â€ â€™ 24h lockout
 
 use std::time::{SystemTime, UNIX_EPOCH, Duration, Instant};
 use crate::database::Db;
@@ -34,7 +34,7 @@ pub fn check_locked(db: &Db, vault_id: u64) -> Option<Instant> {
         .conn()
         .query_row(
             "SELECT locked_until_unix FROM auth_attempts WHERE vault_id = ?1",
-            rusqlite::params![vault_id],
+            rusqlite::params![vault_id as i64],
             |row| row.get::<_, i64>(0),
         )
         .optional()
@@ -67,7 +67,7 @@ pub fn record_failure(db: &Db, vault_id: u64) {
         .conn()
         .query_row(
             "SELECT failed_count FROM auth_attempts WHERE vault_id = ?1",
-            rusqlite::params![vault_id],
+            rusqlite::params![vault_id as i64],
             |row| row.get::<_, i64>(0),
         )
         .optional()
@@ -75,11 +75,15 @@ pub fn record_failure(db: &Db, vault_id: u64) {
         .flatten();
 
     let new_count = current.map_or(1, |c| c + 1);
+    // Highest matching tier wins (5→30s, 10→5min, 15→1h, 20+→24h).
+    // Below the first threshold: record the attempt, lock nothing —
+    // locked_until = now, which check_locked treats as already expired.
     let lockout_seconds = THRESHOLDS
         .iter()
+        .rev()
         .find(|(threshold, _)| new_count >= (*threshold as i64))
         .map(|(_, secs)| *secs)
-        .unwrap_or(LOCKOUT_MAX);
+        .unwrap_or(0);
 
     let locked_until = now + lockout_seconds;
 
@@ -90,7 +94,7 @@ pub fn record_failure(db: &Db, vault_id: u64) {
            failed_count = ?2,
            locked_until_unix = ?3,
            last_attempt_unix = ?4",
-        rusqlite::params![vault_id, new_count, locked_until, now],
+        rusqlite::params![vault_id as i64, new_count, locked_until, now],
     );
 }
 
@@ -98,7 +102,7 @@ pub fn record_failure(db: &Db, vault_id: u64) {
 pub fn clear_attempts(db: &Db, vault_id: u64) {
     let _ = db.conn().execute(
         "DELETE FROM auth_attempts WHERE vault_id = ?1",
-        rusqlite::params![vault_id],
+        rusqlite::params![vault_id as i64],
     );
 }
 
@@ -107,7 +111,7 @@ pub fn failed_count(db: &Db, vault_id: u64) -> u64 {
     db.conn()
         .query_row(
             "SELECT failed_count FROM auth_attempts WHERE vault_id = ?1",
-            rusqlite::params![vault_id],
+            rusqlite::params![vault_id as i64],
             |row| row.get::<_, i64>(0),
         )
         .unwrap_or(0) as u64

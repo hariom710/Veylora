@@ -15,7 +15,7 @@ export default defineConfig({
     setupFiles: ['./vitest.setup.ts'],
   },
   build: {
-    outDir: '../src-tauri/target/release/dist',
+    outDir: 'dist',
     emptyOutDir: true,
   },
 });

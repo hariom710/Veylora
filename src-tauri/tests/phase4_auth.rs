@@ -240,6 +240,48 @@ fn phase4_attempt_throttling_wrong_pin() {
 }
 
 #[test]
+fn phase4_no_lockout_below_five_failures() {
+    let tmp = setup_vault_dir();
+    let (db, _mvk_bytes, _recovery_key) = create_test_vault(&tmp);
+
+    // Regression: one typo used to fall through to the 24h LOCKOUT_MAX tier
+    // (no threshold matches, .unwrap_or fired). Below 5 = count only.
+    throttle::record_failure(&db, 1);
+    assert_eq!(throttle::failed_count(&db, 1), 1);
+    assert!(
+        throttle::check_locked(&db, 1).is_none(),
+        "1 failure must not lock the vault"
+    );
+
+    for _ in 0..3 {
+        throttle::record_failure(&db, 1);
+    }
+    assert!(
+        throttle::check_locked(&db, 1).is_none(),
+        "4 failures must not lock the vault"
+    );
+
+    throttle::record_failure(&db, 1); // 5th
+    assert!(
+        throttle::check_locked(&db, 1).is_some(),
+        "5 failures must lock the vault"
+    );
+
+    // Tier selection: the highest matching threshold wins — 10 failures
+    // → 5 minutes, not the 30s tier.
+    throttle::clear_attempts(&db, 1);
+    for _ in 0..10 {
+        throttle::record_failure(&db, 1);
+    }
+    let expiry = throttle::check_locked(&db, 1).expect("10 failures lock out");
+    let remaining = expiry.duration_since(std::time::Instant::now()).as_secs();
+    assert!(
+        (290..=300).contains(&remaining),
+        "10 failures → ~5min lockout, got {remaining}s"
+    );
+}
+
+#[test]
 fn phase4_wrong_password() {
     let tmp = setup_vault_dir();
     let (_db, _mvk_bytes, _recovery_key) = create_test_vault(&tmp);
@@ -399,4 +441,39 @@ fn phase4_windows_session_lock_deferred() {
     // are not needed for the core security functionality of Phase 4.
 
     assert!(true, "Windows session-lock deferred to Phase 8");
+}
+
+#[test]
+fn phase4_commands_lock_reopen_unlock_roundtrip() {
+    // Regression: unlock used session.vault_id(), which is None while locked,
+    // so lock -> unlock always failed with "no active session". vault_id now
+    // comes from vault.meta, and the UI re-opens the path after lock() clears it.
+    let tmp = setup_vault_dir();
+    let path = tmp.to_str().unwrap().to_string();
+    let manager = std::sync::Arc::new(SessionManager::new());
+
+    veylora::commands::vault_create(
+        "test".into(),
+        path.clone(),
+        "1234".into(),
+        "pw123456".into(),
+        manager.clone(),
+    )
+    .expect("vault_create should succeed");
+    assert!(!manager.is_locked(), "create leaves vault unlocked");
+
+    veylora::commands::vault_lock(manager.clone()).expect("lock should succeed");
+    assert!(manager.is_locked(), "vault should be locked after lock()");
+
+    // lock() cleared current_path; the UI re-opens it (same as restart flow).
+    veylora::commands::vault_open(path.clone(), manager.clone()).expect("reopen should succeed");
+    assert!(manager.is_locked(), "reopen must not unlock");
+
+    let result =
+        veylora::commands::vault_unlock_pin("1234".into(), manager.clone())
+            .expect("unlock after lock should succeed");
+    assert_eq!(result.unlock_method, "pin");
+    assert!(!manager.is_locked(), "vault unlocked with PIN");
+
+    let _ = std::fs::remove_dir_all(&tmp);
 }

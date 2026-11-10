@@ -9,7 +9,7 @@ use rusqlite::OptionalExtension;
 /// a database connection, and a vault directory, and return the decrypted
 /// plaintext bytes (or an error).
 ///
-/// This is a pure function — it does not perform I/O beyond reading from
+/// This is a pure function ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â it does not perform I/O beyond reading from
 /// the DB and the encrypted blob directory. It accumulates plaintext bytes
 /// in memory and returns them as Vec<u8>.
 ///
@@ -51,10 +51,10 @@ pub fn handle_request(
             rusqlite::params![file_id_hex],
             |row| {
                 Ok((
-                    row.get::<_, u64>("id")?,
-                    row.get::<_, u64>("vault_id")?,
+                    row.get::<_, i64>("id")? as u64,
+                    row.get::<_, i64>("vault_id")? as u64,
                     row.get::<_, String>("file_id")?,
-                    row.get::<_, u64>("encrypted_size")?,
+                    row.get::<_, i64>("encrypted_size")? as u64,
                     row.get::<_, u32>("encryption_version")?,
                 ))
             },
@@ -80,7 +80,7 @@ pub fn handle_request(
     let mut plaintext = Vec::new();
 
     for chunk_index in chunk_index_start..=chunk_index_end {
-        // Check lock before each chunk — mid-stream lock aborts.
+        // Check lock before each chunk ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â mid-stream lock aborts.
         if manager.is_locked() {
             return Err(StreamError::MidStreamLock);
         }

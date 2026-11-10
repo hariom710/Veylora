@@ -146,7 +146,7 @@ pub fn verify_backup(
         }
 
         // Verify trailer structure.
-        let mut trailer_cursor = &mut &trailer_data[..];
+        let trailer_cursor = &mut &trailer_data[..];
 
         let mut trailer_magic = [0u8; 4];
         trailer_cursor.read_exact(&mut trailer_magic)

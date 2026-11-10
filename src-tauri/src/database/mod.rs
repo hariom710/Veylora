@@ -6,6 +6,7 @@
 use std::path::Path;
 
 pub mod crypto;
+pub mod favorites;
 pub mod files;
 pub mod folders;
 pub mod schema;

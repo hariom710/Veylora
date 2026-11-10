@@ -58,7 +58,7 @@ describe('Backup screen', () => {
 
     render(<Backup />);
 
-    const destInput = screen.getByPlaceholderText('Select backup destination...');
+    const destInput = screen.getByPlaceholderText('Backup destination path');
     await userEvent.clear(destInput);
     await userEvent.type(destInput, '/backups/test.vey');
 
@@ -76,7 +76,7 @@ describe('Backup screen', () => {
 
     render(<Backup />);
 
-    const destInput = screen.getByPlaceholderText('Select backup destination...');
+    const destInput = screen.getByPlaceholderText('Backup destination path');
     await userEvent.clear(destInput);
     await userEvent.type(destInput, '/backups/corrupt.vey');
 

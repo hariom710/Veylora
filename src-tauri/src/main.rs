@@ -5,17 +5,8 @@ use std::sync::Arc;
 use std::path::Path;
 
 use veylora::auth::session::SessionManager;
-use veylora::streaming::protocol::register_vault_protocol;
 use veylora::database::Db;
 use veylora::storage::vault_dir::VaultDir;
-use veylora::commands::{
-    vault_create, vault_open, vault_unlock_pin, vault_unlock_password,
-    vault_unlock_recovery, vault_lock, vault_status, vault_get_meta,
-    vault_get_session_token, CommandError,
-    VaultInfo, UnlockResult, StatusInfo, VaultPublicMeta,
-    vault_backup_create, vault_backup_verify, vault_backup_restore,
-    vault_backup_history, BackupInfo, RestoreInfo, BackupHistoryEntry,
-};
 
 #[tauri::command]
 fn vault_status_cmd(
@@ -119,12 +110,223 @@ fn vault_backup_history_cmd(
     veylora::commands::vault_backup_history(state.inner().clone())
 }
 
+// ---- Phase 9: Layer-1 app login (app_users, no vault access) ----
+
+#[tauri::command]
+fn app_status_cmd(
+    state: tauri::State<'_, Arc<veylora::app_auth::AppAuth>>,
+) -> Result<veylora::app_auth::AppStatus, String> {
+    Ok(state.status())
+}
+
+#[tauri::command]
+fn app_login_cmd(
+    email: String,
+    password: String,
+    state: tauri::State<'_, Arc<veylora::app_auth::AppAuth>>,
+) -> Result<veylora::app_auth::AppStatus, String> {
+    state.login(&email, &password)
+}
+
+#[tauri::command]
+fn app_signup_cmd(
+    email: String,
+    password: String,
+    state: tauri::State<'_, Arc<veylora::app_auth::AppAuth>>,
+) -> Result<(), String> {
+    state.signup(&email, &password)
+}
+
+#[tauri::command]
+fn app_logout_cmd(
+    state: tauri::State<'_, Arc<veylora::app_auth::AppAuth>>,
+) -> Result<(), String> {
+    state.logout();
+    Ok(())
+}
+
+#[tauri::command]
+fn app_change_password_cmd(
+    old_password: String,
+    new_password: String,
+    state: tauri::State<'_, Arc<veylora::app_auth::AppAuth>>,
+) -> Result<(), String> {
+    state.change_password(&old_password, &new_password)
+}
+
+#[tauri::command]
+fn app_list_users_cmd(
+    state: tauri::State<'_, Arc<veylora::app_auth::AppAuth>>,
+) -> Result<Vec<veylora::app_auth::AppUser>, String> {
+    state.list_users()
+}
+
+#[tauri::command]
+fn app_delete_user_cmd(
+    id: u64,
+    state: tauri::State<'_, Arc<veylora::app_auth::AppAuth>>,
+) -> Result<(), String> {
+    state.delete_user(id)
+}
+
+#[tauri::command]
+fn app_create_user_cmd(
+    email: String,
+    password: String,
+    role: String,
+    state: tauri::State<'_, Arc<veylora::app_auth::AppAuth>>,
+) -> Result<(), String> {
+    state.create_user(&email, &password, &role)
+}
+
+// ---- Slice B: file/folder commands (import, list, export, rename, delete) ----
+
+#[tauri::command]
+fn file_import_cmd(
+    paths: Vec<String>,
+    folder_id: Option<u64>,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<Vec<veylora::commands::files::FileInfo>, String> {
+    veylora::commands::files::file_import(paths, folder_id, state.inner().clone())
+}
+
+#[tauri::command]
+fn file_list_cmd(
+    folder_id: Option<u64>,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<veylora::commands::files::Listing, String> {
+    veylora::commands::files::file_list(folder_id, state.inner().clone())
+}
+
+#[tauri::command]
+fn file_export_cmd(
+    id: u64,
+    dest_path: String,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<u64, String> {
+    veylora::commands::files::file_export(id, dest_path, state.inner().clone())
+}
+
+#[tauri::command]
+fn file_delete_cmd(
+    id: u64,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<(), String> {
+    veylora::commands::files::file_delete(id, state.inner().clone())
+}
+
+#[tauri::command]
+fn file_rename_cmd(
+    id: u64,
+    new_filename: String,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<(), String> {
+    veylora::commands::files::file_rename(id, new_filename, state.inner().clone())
+}
+
+#[tauri::command]
+fn folder_list_cmd(
+    parent_id: Option<u64>,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<Vec<veylora::commands::files::FolderInfo>, String> {
+    veylora::commands::files::folder_list(parent_id, state.inner().clone())
+}
+
+#[tauri::command]
+fn folder_create_cmd(
+    name: String,
+    parent_id: Option<u64>,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<veylora::commands::files::FolderInfo, String> {
+    veylora::commands::files::folder_create(name, parent_id, state.inner().clone())
+}
+
+// ---- Slice C: favorites / recent / activity / settings / danger zone ----
+
+#[tauri::command]
+fn file_favorite_cmd(
+    id: u64,
+    favorite: bool,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<(), String> {
+    veylora::commands::files::file_favorite(id, favorite, state.inner().clone())
+}
+
+#[tauri::command]
+fn file_favorites_cmd(
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<Vec<veylora::commands::files::FileInfo>, String> {
+    veylora::commands::files::file_favorites(state.inner().clone())
+}
+
+#[tauri::command]
+fn file_recent_cmd(
+    limit: u64,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<Vec<veylora::commands::files::FileInfo>, String> {
+    veylora::commands::files::file_recent(limit, state.inner().clone())
+}
+
+#[tauri::command]
+fn vault_activity_cmd(state: tauri::State<'_, Arc<SessionManager>>) -> Result<(), String> {
+    veylora::commands::vault_activity(state.inner().clone())
+}
+
+#[tauri::command]
+fn auto_lock_set_cmd(secs: u64) -> Result<(), String> {
+    veylora::commands::auto_lock_set(secs)
+}
+
+#[tauri::command]
+fn vault_change_pin_cmd(
+    current_pin: String,
+    new_pin: String,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<(), String> {
+    veylora::commands::vault_change_pin(current_pin, new_pin, state.inner().clone())
+}
+
+#[tauri::command]
+fn vault_change_password_cmd(
+    current_password: String,
+    new_password: String,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<(), String> {
+    veylora::commands::vault_change_password(
+        current_password,
+        new_password,
+        state.inner().clone(),
+    )
+}
+
+#[tauri::command]
+fn vault_backup_history_clear_cmd(
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<(), String> {
+    veylora::commands::vault_backup_history_clear(state.inner().clone())
+}
+
+#[tauri::command]
+fn vault_delete_cmd(
+    pin: String,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<(), String> {
+    veylora::commands::vault_delete(pin, state.inner().clone())
+}
+
 fn main() {
     let manager: Arc<SessionManager> = Arc::new(SessionManager::new());
+    let app_auth: Arc<veylora::app_auth::AppAuth> =
+        Arc::new(veylora::app_auth::AppAuth::new().expect("APPDATA not available"));
+
+    // Auto-lock watcher: previously dead code (never spawned). Reads the
+    // timeout from Settings on every tick (0 = never).
+    veylora::auth::auto_lock::spawn_watcher(manager.clone());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(manager.clone())
+        .manage(app_auth)
         .register_uri_scheme_protocol("vault", move |_app, request| {
             let current_path = manager.current_path().unwrap_or_default();
             let vault_dir_path = Path::new(&current_path).parent().unwrap_or(Path::new(""));
@@ -154,6 +356,30 @@ fn main() {
             vault_backup_verify_cmd,
             vault_backup_restore_cmd,
             vault_backup_history_cmd,
+            app_status_cmd,
+            app_login_cmd,
+            app_signup_cmd,
+            app_logout_cmd,
+            app_change_password_cmd,
+            app_list_users_cmd,
+            app_delete_user_cmd,
+            app_create_user_cmd,
+            file_import_cmd,
+            file_list_cmd,
+            file_export_cmd,
+            file_delete_cmd,
+            file_rename_cmd,
+            folder_list_cmd,
+            folder_create_cmd,
+            file_favorite_cmd,
+            file_favorites_cmd,
+            file_recent_cmd,
+            vault_activity_cmd,
+            auto_lock_set_cmd,
+            vault_change_pin_cmd,
+            vault_change_password_cmd,
+            vault_backup_history_clear_cmd,
+            vault_delete_cmd,
         ])
         .run(generate_context!())
         .expect("error while running tauri application");

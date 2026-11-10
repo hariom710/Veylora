@@ -37,7 +37,7 @@ pub fn insert_file(
     encrypted_size: u64,
 ) -> Result<u64, DbError> {
     // Check for duplicate file_id
-    let existing: Option<u64> = db
+    let existing: Option<i64> = db
         .conn
         .query_row(
             "SELECT id FROM encrypted_files WHERE file_id = ?1",
@@ -82,12 +82,12 @@ pub fn insert_file(
             created_at_nonce, created_at_ciphertext, modified_at_nonce, modified_at_ciphertext)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         rusqlite::params![
-            vault_id,
+            vault_id as i64,
             file_id,
             fn_nonce,
             fn_cipher,
-            folder_id,
-            encrypted_size,
+            folder_id.map(|v| v as i64),
+            encrypted_size as i64,
             ENCRYPTION_VERSION,
             ca_nonce,
             ca_cipher,
@@ -158,15 +158,15 @@ pub fn get_file(db: &Db, metadata_key: &[u8; 32], id: u64) -> Result<FileRecord,
                     created_at_nonce, created_at_ciphertext,
                     modified_at_nonce, modified_at_ciphertext
              FROM encrypted_files WHERE id = ?1",
-            rusqlite::params![id],
+            rusqlite::params![id as i64],
             |row| {
                 Ok((
-                    row.get::<_, u64>(0)?,
+                    row.get::<_, i64>(0)? as u64,
                     row.get::<_, String>(1)?,
                     row.get::<_, Vec<u8>>(2)?,
                     row.get::<_, Vec<u8>>(3)?,
-                    row.get::<_, Option<u64>>(4)?,
-                    row.get::<_, u64>(5)?,
+                    row.get::<_, Option<i64>>(4)?.map(|v| v as u64),
+                    row.get::<_, i64>(5)? as u64,
                     row.get::<_, u32>(6)?,
                     row.get::<_, Vec<u8>>(7)?,
                     row.get::<_, Vec<u8>>(8)?,
@@ -222,14 +222,14 @@ pub fn list_files(
                         modified_at_nonce, modified_at_ciphertext
                  FROM encrypted_files WHERE folder_id = ?1",
             ).map_err(DbError::from)?;
-            let file_rows = stmt.query_map(rusqlite::params![fid], |row| {
+            let file_rows = stmt.query_map(rusqlite::params![fid as i64], |row| {
                 Ok((
-                    row.get::<_, u64>(0)?,
+                    row.get::<_, i64>(0)? as u64,
                     row.get::<_, String>(1)?,
                     row.get::<_, Vec<u8>>(2)?,
                     row.get::<_, Vec<u8>>(3)?,
-                    row.get::<_, Option<u64>>(4)?,
-                    row.get::<_, u64>(5)?,
+                    row.get::<_, Option<i64>>(4)?.map(|v| v as u64),
+                    row.get::<_, i64>(5)? as u64,
                     row.get::<_, u32>(6)?,
                     row.get::<_, Vec<u8>>(7)?,
                     row.get::<_, Vec<u8>>(8)?,
@@ -251,12 +251,12 @@ pub fn list_files(
             ).map_err(DbError::from)?;
             let file_rows = stmt.query_map([], |row| {
                 Ok((
-                    row.get::<_, u64>(0)?,
+                    row.get::<_, i64>(0)? as u64,
                     row.get::<_, String>(1)?,
                     row.get::<_, Vec<u8>>(2)?,
                     row.get::<_, Vec<u8>>(3)?,
-                    row.get::<_, Option<u64>>(4)?,
-                    row.get::<_, u64>(5)?,
+                    row.get::<_, Option<i64>>(4)?.map(|v| v as u64),
+                    row.get::<_, i64>(5)? as u64,
                     row.get::<_, u32>(6)?,
                     row.get::<_, Vec<u8>>(7)?,
                     row.get::<_, Vec<u8>>(8)?,
@@ -275,6 +275,58 @@ pub fn list_files(
         ca_nonce, ca_cipher, ma_nonce, ma_cipher) in rows
     {
         let id = get_file_id_by_file_id(db, &file_id)?;
+        let filename = decrypt_string(metadata_key, TABLE, id, "filename", &fn_nonce, &fn_cipher)?;
+        let created_at = decrypt_string(metadata_key, TABLE, id, "created_at", &ca_nonce, &ca_cipher)?;
+        let modified_at = decrypt_string(metadata_key, TABLE, id, "modified_at", &ma_nonce, &ma_cipher)?;
+        records.push(FileRecord {
+            id,
+            vault_id,
+            file_id,
+            filename,
+            folder_id,
+            encrypted_size,
+            encryption_version,
+            created_at,
+            modified_at,
+        });
+    }
+    Ok(records)
+}
+
+/// Most recently imported files across all folders, newest first.
+pub fn list_recent(
+    db: &Db,
+    metadata_key: &[u8; 32],
+    limit: u64,
+) -> Result<Vec<FileRecord>, DbError> {
+    let mut stmt = db.conn.prepare(
+        "SELECT id, vault_id, file_id, filename_nonce, filename_ciphertext,
+                folder_id, encrypted_size, encryption_version,
+                created_at_nonce, created_at_ciphertext,
+                modified_at_nonce, modified_at_ciphertext
+         FROM encrypted_files ORDER BY id DESC LIMIT ?1",
+    ).map_err(DbError::from)?;
+    let file_rows = stmt.query_map(rusqlite::params![limit as i64], |row| {
+        Ok((
+            row.get::<_, i64>(0)? as u64,
+            row.get::<_, i64>(1)? as u64,
+            row.get::<_, String>(2)?,
+            row.get::<_, Vec<u8>>(3)?,
+            row.get::<_, Vec<u8>>(4)?,
+            row.get::<_, Option<i64>>(5)?.map(|v| v as u64),
+            row.get::<_, i64>(6)? as u64,
+            row.get::<_, u32>(7)?,
+            row.get::<_, Vec<u8>>(8)?,
+            row.get::<_, Vec<u8>>(9)?,
+            row.get::<_, Vec<u8>>(10)?,
+            row.get::<_, Vec<u8>>(11)?,
+        ))
+    }).map_err(DbError::from)?;
+
+    let mut records = Vec::new();
+    for row in file_rows {
+        let (id, vault_id, file_id, fn_nonce, fn_cipher, folder_id, encrypted_size,
+            encryption_version, ca_nonce, ca_cipher, ma_nonce, ma_cipher) = row.map_err(DbError::from)?;
         let filename = decrypt_string(metadata_key, TABLE, id, "filename", &fn_nonce, &fn_cipher)?;
         let created_at = decrypt_string(metadata_key, TABLE, id, "created_at", &ca_nonce, &ca_cipher)?;
         let modified_at = decrypt_string(metadata_key, TABLE, id, "modified_at", &ma_nonce, &ma_cipher)?;
@@ -314,7 +366,7 @@ pub fn rename_file(
 
     db.conn.execute(
         "UPDATE encrypted_files SET filename_nonce = ?2, filename_ciphertext = ?3 WHERE id = ?1",
-        rusqlite::params![id, nonce, ciphertext],
+        rusqlite::params![id as i64, nonce, ciphertext],
     ).map_err(DbError::from)?;
 
     Ok(())
@@ -332,7 +384,7 @@ pub fn delete_file(
         .conn
         .query_row(
             "SELECT file_id FROM encrypted_files WHERE id = ?1",
-            rusqlite::params![id],
+            rusqlite::params![id as i64],
             |row| row.get(0),
         )
         .optional()
@@ -343,7 +395,7 @@ pub fn delete_file(
 
     db.conn.execute(
         "DELETE FROM encrypted_files WHERE id = ?1",
-        rusqlite::params![id],
+        rusqlite::params![id as i64],
     ).map_err(DbError::from)?;
     eprintln!("DEBUG delete_file: deleted id={}", id);
 
@@ -369,13 +421,13 @@ pub fn move_file(
 ) -> Result<(), DbError> {
     db.conn.execute(
         "UPDATE encrypted_files SET folder_id = ?2 WHERE id = ?1",
-        rusqlite::params![id, new_folder_id],
+        rusqlite::params![id as i64, new_folder_id.map(|v| v as i64)],
     ).map_err(DbError::from)?;
     Ok(())
 }
 
 /// Helper: get the internal row id from file_id hex.
-fn get_file_id_by_file_id(db: &Db, file_id: &str) -> Result<u64, DbError> {
+pub fn get_file_id_by_file_id(db: &Db, file_id: &str) -> Result<u64, DbError> {
     let id: i64 = db
         .conn
         .query_row(

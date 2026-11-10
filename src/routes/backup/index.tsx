@@ -8,7 +8,7 @@ import {
   vaultBackupHistory,
 } from '@/lib/ipc';
 import type { BackupInfo, RestoreInfo, BackupHistoryEntry } from '@/lib/types';
-import { saveDialog, openDialog } from '@tauri-apps/plugin-dialog';
+import { save as saveDialog, open as openDialog } from '@tauri-apps/plugin-dialog';
 
 export default function Backup() {
   const [backupInfo, setBackupInfo] = useState<BackupInfo | null>(null);
@@ -28,29 +28,26 @@ export default function Backup() {
     }
   }
 
-  async function handlePickBackupDest() {
-    const selected = await saveDialog({
-      defaultPath: 'veylora-backup.vey',
-      filters: [{ name: 'Veylora Backup', extensions: ['vey'] }],
+  async function pickBackupDest() {
+    const picked = await saveDialog({
+      title: 'Backup destination',
+      filters: [{ name: 'Veylora backup', extensions: ['vey'] }],
     });
-    if (selected) {
-      setBackupDest(selected);
-    }
+    if (picked) setBackupDest(picked);
   }
 
-  async function handlePickRestoreSource() {
-    const selected = await openDialog({
-      filters: [{ name: 'Veylora Backup', extensions: ['vey'] }],
+  async function pickRestoreSource() {
+    const picked = await openDialog({
+      title: 'Backup file to restore',
       multiple: false,
+      filters: [{ name: 'Veylora backup', extensions: ['vey'] }],
     });
-    if (selected && selected.length > 0) {
-      setRestoreSource(selected[0]);
-    }
+    if (picked) setRestoreSource(picked);
   }
 
   async function handleCreateBackup() {
     if (!backupDest) {
-      setMessage('Please select a backup destination');
+      setMessage('Please enter a backup destination path');
       return;
     }
     setLoading(true);
@@ -71,7 +68,7 @@ export default function Backup() {
 
   async function handleVerifyBackup() {
     if (!backupDest) {
-      setMessage('Please select a backup to verify');
+      setMessage('Please enter a backup path to verify');
       return;
     }
     setLoading(true);
@@ -92,7 +89,7 @@ export default function Backup() {
 
   async function handleRestoreBackup() {
     if (!restoreSource) {
-      setMessage('Please select a backup to restore');
+      setMessage('Please enter a backup file to restore');
       return;
     }
     setLoading(true);
@@ -123,18 +120,19 @@ export default function Backup() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm text-slate-400">Backup Destination</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Select backup destination..."
-                    value={backupDest}
-                    onChange={(e) => setBackupDest(e.target.value)}
-                    className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200"
-                  />
-                  <Button onClick={handlePickBackupDest} variant="outline" size="sm">
-                    Browse
-                  </Button>
-                </div>
+                <input
+                  type="text"
+                  placeholder="Backup destination path"
+                  value={backupDest}
+                  onChange={(e) => setBackupDest(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Enter a full filesystem path (e.g., C:\Users\Name\Backups\myvault.vey)
+                </p>
+                <Button variant="outline" size="sm" onClick={pickBackupDest}>
+                  Browse…
+                </Button>
               </div>
               <div className="flex gap-2">
                 <Button
@@ -154,18 +152,16 @@ export default function Backup() {
 
               <div className="space-y-2">
                 <label className="text-sm text-slate-400">Restore Source</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Select backup file..."
-                    value={restoreSource}
-                    onChange={(e) => setRestoreSource(e.target.value)}
-                    className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200"
-                  />
-                  <Button onClick={handlePickRestoreSource} variant="outline" size="sm">
-                    Browse
-                  </Button>
-                </div>
+                <input
+                  type="text"
+                  placeholder="Backup file to restore"
+                  value={restoreSource}
+                  onChange={(e) => setRestoreSource(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200"
+                />
+                <Button variant="outline" size="sm" onClick={pickRestoreSource}>
+                  Browse…
+                </Button>
               </div>
               <Button
                 onClick={handleRestoreBackup}

@@ -6,6 +6,8 @@ export interface VaultInfo {
   name: string;
   path: string;
   vault_id: number;
+  /** Encoded recovery key, non-empty exactly once (at vault creation). */
+  recovery_key: string;
 }
 
 export interface UnlockResult {
@@ -18,6 +20,45 @@ export interface StatusInfo {
   vault_id: number | null;
   file_count: number;
   storage_used: number;
+  vault_open: boolean;
+}
+
+export interface AppStatus {
+  logged_in: boolean;
+  email: string | null;
+  role: string | null;
+  logged_in_since: number | null;
+  used_default_password: boolean;
+}
+
+export interface AppUser {
+  id: number;
+  email: string;
+  role: string;
+  created_at: number;
+  last_login: number | null;
+}
+
+export interface FileInfo {
+  id: number;
+  filename: string;
+  file_id: string;
+  folder_id: number | null;
+  encrypted_size: number;
+  created_at: string;
+  modified_at: string;
+}
+
+export interface FolderInfo {
+  id: number;
+  parent_id: number | null;
+  name: string;
+  created_at: string;
+}
+
+export interface Listing {
+  files: FileInfo[];
+  folders: FolderInfo[];
 }
 
 export interface VaultPublicMeta {

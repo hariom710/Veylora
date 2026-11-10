@@ -3,8 +3,6 @@
 use crate::auth::AuthError;
 use crate::auth::session::Session;
 use crate::auth::UnlockMethod;
-use crate::crypto::kdf::SALT_LEN;
-use crate::crypto::mvk::Mvk;
 use crate::storage::vault_dir::VaultDir;
 use crate::vault::VaultMeta;
 use std::collections::hash_map::DefaultHasher;

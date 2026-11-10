@@ -46,7 +46,7 @@ pub fn insert_folder(
         "INSERT INTO folders (vault_id, parent_id, name_nonce, name_ciphertext,
             created_at_nonce, created_at_ciphertext)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        rusqlite::params![vault_id, parent_id, n_nonce, n_cipher, ca_nonce, ca_cipher],
+        rusqlite::params![vault_id as i64, parent_id.map(|v| v as i64), n_nonce, n_cipher, ca_nonce, ca_cipher],
     ).map_err(DbError::from)?;
 
     let id: i64 = db
@@ -89,11 +89,11 @@ pub fn get_folder(db: &Db, metadata_key: &[u8; 32], id: u64) -> Result<FolderRec
             "SELECT vault_id, parent_id, name_nonce, name_ciphertext,
                     created_at_nonce, created_at_ciphertext
              FROM folders WHERE id = ?1",
-            rusqlite::params![id],
+            rusqlite::params![id as i64],
             |row| {
                 Ok((
-                    row.get::<_, u64>(0)?,
-                    row.get::<_, Option<u64>>(1)?,
+                    row.get::<_, i64>(0)? as u64,
+                    row.get::<_, Option<i64>>(1)?.map(|v| v as u64),
                     row.get::<_, Vec<u8>>(2)?,
                     row.get::<_, Vec<u8>>(3)?,
                     row.get::<_, Vec<u8>>(4)?,
@@ -139,11 +139,11 @@ pub fn list_children(
                         created_at_nonce, created_at_ciphertext
                  FROM folders WHERE parent_id = ?1",
             ).map_err(DbError::from)?;
-            let file_rows = stmt.query_map(rusqlite::params![pid], |row| {
+            let file_rows = stmt.query_map(rusqlite::params![pid as i64], |row| {
                 Ok((
-                    row.get::<_, u64>(0)?,
-                    row.get::<_, u64>(1)?,
-                    row.get::<_, Option<u64>>(2)?,
+                    row.get::<_, i64>(0)? as u64,
+                    row.get::<_, i64>(1)? as u64,
+                    row.get::<_, Option<i64>>(2)?.map(|v| v as u64),
                     row.get::<_, Vec<u8>>(3)?,
                     row.get::<_, Vec<u8>>(4)?,
                     row.get::<_, Vec<u8>>(5)?,
@@ -162,9 +162,9 @@ pub fn list_children(
             ).map_err(DbError::from)?;
             let file_rows = stmt.query_map([], |row| {
                 Ok((
-                    row.get::<_, u64>(0)?,
-                    row.get::<_, u64>(1)?,
-                    row.get::<_, Option<u64>>(2)?,
+                    row.get::<_, i64>(0)? as u64,
+                    row.get::<_, i64>(1)? as u64,
+                    row.get::<_, Option<i64>>(2)?.map(|v| v as u64),
                     row.get::<_, Vec<u8>>(3)?,
                     row.get::<_, Vec<u8>>(4)?,
                     row.get::<_, Vec<u8>>(5)?,
@@ -212,7 +212,7 @@ pub fn rename_folder(
 
     db.conn.execute(
         "UPDATE folders SET name_nonce = ?2, name_ciphertext = ?3 WHERE id = ?1",
-        rusqlite::params![id, nonce, ciphertext],
+        rusqlite::params![id as i64, nonce, ciphertext],
     ).map_err(DbError::from)?;
 
     Ok(())

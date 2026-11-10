@@ -8,7 +8,7 @@ use std::io::Read;
 use crate::backup::{
     container, BackupError, RestoreInfo, Result,
 };
-use crate::backup::container::ManifestEntry;
+
 use sha2::{Digest, Sha256};
 
 use crate::crypto::hkdf::{LABEL_BACKUP_KEY, LABEL_METADATA_KEY};
@@ -98,7 +98,7 @@ pub fn restore_backup(
 
     for entry in &manifest.entries {
         // Check for duplicate file_id.
-        let existing: Option<u64> = tx
+        let existing: Option<i64> = tx
             .query_row(
                 "SELECT id FROM encrypted_files WHERE file_id = ?1",
                 rusqlite::params![hex_encode(&entry.file_id)],
@@ -174,8 +174,8 @@ pub fn restore_backup(
                 hex_encode(&entry.file_id),
                 fn_nonce,
                 fn_cipher,
-                None::<u64>, // folder_id
-                entry.encrypted_size,
+                None::<i64>, // folder_id
+                entry.encrypted_size as i64,
                 entry.encryption_ver,
                 ca_nonce,
                 ca_cipher,

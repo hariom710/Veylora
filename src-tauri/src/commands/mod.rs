@@ -2,7 +2,7 @@
 //!
 //! No command argument or return type may contain key material (MVK, KEK,
 //! nonce, ciphertext, etc.). Plaintext file metadata (filenames, etc.) is
-//! allowed because the UI needs to display it — the rule is about key
+//! allowed because the UI needs to display it â€” the rule is about key
 //! material, not user data.
 
 #![allow(missing_docs)]
@@ -11,10 +11,12 @@ use std::sync::Arc;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use crate::auth::session::SessionManager;
-use crate::auth::{AuthError, UnlockMethod};
+use crate::auth::UnlockMethod;
 use crate::database::Db;
 use crate::storage::vault_dir::VaultDir;
 use crate::vault::VaultMeta;
+
+pub mod files;  // Slice B: file/folder IPC commands (import, list, export, ...)
 
 /// Information returned on vault create/open.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -22,6 +24,9 @@ pub struct VaultInfo {
     pub name: String,
     pub path: String,
     pub vault_id: u64,
+    /// Encoded recovery key, returned exactly once at creation.
+    /// Empty for vault_open (the key cannot be recovered from nothing).
+    pub recovery_key: String,
 }
 
 /// Result of an unlock operation.
@@ -38,6 +43,9 @@ pub struct StatusInfo {
     pub vault_id: Option<u64>,
     pub file_count: u64,
     pub storage_used: u64,
+    /// Whether a vault path is open in this process (set by vault_create/vault_open).
+    /// False on fresh start: the UI must offer create/open before unlock.
+    pub vault_open: bool,
 }
 
 /// Public vault metadata (no salts, no wrapped keys).
@@ -52,7 +60,7 @@ pub struct VaultPublicMeta {
 /// Create a new vault at `path` with PIN and password.
 #[allow(dead_code)]
 pub fn vault_create(
-    name: String,
+    _name: String,
     path: String,
     pin: String,
     password: String,
@@ -71,6 +79,12 @@ pub fn vault_create(
         .map_err(|e| e.to_string())?;
     meta.add_password_entry(pw_bytes, &mvk)
         .map_err(|e| e.to_string())?;
+    // Third unlock path: 256-bit recovery key, HKDF-wrapped (frozen label).
+    // Generated before serialize so the entry lands in vault.meta at creation.
+    let recovery_key = crate::crypto::recovery::generate_recovery_key();
+    meta.add_recovery_entry(&recovery_key, &mvk)
+        .map_err(|e| e.to_string())?;
+    let recovery_key_encoded = crate::crypto::recovery::encode_recovery_key(&recovery_key);
 
     // Write vault.meta atomically
     let meta_json = meta.serialize().map_err(|e| e.to_string())?;
@@ -90,7 +104,7 @@ pub fn vault_create(
         rusqlite::params![1, std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs()],
+            .as_secs() as i64],
     ).map_err(|e| e.to_string())?;
 
     let vault_id = vault_id_from_meta(&meta);
@@ -103,6 +117,7 @@ pub fn vault_create(
         name: path.clone(),
         path: path.clone(),
         vault_id,
+        recovery_key: recovery_key_encoded,
     })
 }
 
@@ -122,13 +137,14 @@ pub fn vault_open(
 
     let vault_id = vault_id_from_meta(&meta);
 
-    // Store the current path (no session yet — locked state)
+    // Store the current path (no session yet â€” locked state)
     session.set_current_path(path.clone());
 
     Ok(VaultInfo {
         name: path.clone(),
         path: path.clone(),
         vault_id,
+        recovery_key: String::new(),
     })
 }
 
@@ -144,7 +160,7 @@ pub fn vault_unlock_pin(
         &std::path::Path::new(&path).join("vault.db"),
     ).map_err(|e| e.to_string())?;
 
-    let vault_id = session.vault_id().ok_or_else(|| "no active session".to_string())?;
+    let vault_id = vault_id_at(&path)?;
 
     // Check throttling
     if let Some(lockout) = crate::auth::throttle::check_locked(&db, vault_id) {
@@ -180,7 +196,7 @@ pub fn vault_unlock_password(
         &std::path::Path::new(&path).join("vault.db"),
     ).map_err(|e| e.to_string())?;
 
-    let vault_id = session.vault_id().ok_or_else(|| "no active session".to_string())?;
+    let vault_id = vault_id_at(&path)?;
 
     if let Some(lockout) = crate::auth::throttle::check_locked(&db, vault_id) {
         let remaining = lockout.duration_since(std::time::Instant::now()).as_secs();
@@ -214,7 +230,7 @@ pub fn vault_unlock_recovery(
         &std::path::Path::new(&path).join("vault.db"),
     ).map_err(|e| e.to_string())?;
 
-    let vault_id = session.vault_id().ok_or_else(|| "no active session".to_string())?;
+    let vault_id = vault_id_at(&path)?;
 
     if let Some(lockout) = crate::auth::throttle::check_locked(&db, vault_id) {
         let remaining = lockout.duration_since(std::time::Instant::now()).as_secs();
@@ -262,6 +278,7 @@ pub fn vault_status(
         vault_id,
         file_count: 0,
         storage_used: 0,
+        vault_open: session.current_path().is_some(),
     })
 }
 
@@ -315,7 +332,7 @@ impl std::error::Error for CommandError {}
 
 /// Return the current session token as a hex string.
 /// This is the single new command allowed in Phase 5.
-/// The token is NOT the MVK, KEK, or any derived key — it is a random
+/// The token is NOT the MVK, KEK, or any derived key â€” it is a random
 /// 32-byte value that rotates on unlock and invalidates on lock.
 /// The frontend receives it as a String (hex) and passes it as a query
 /// param to vault:// requests. It does not contain key material, so the
@@ -334,6 +351,17 @@ pub fn vault_get_session_token(
 }
 
 /// Derive vault_id from VaultMeta.
+/// vault_id from vault.meta. Unlock uses this because while locked there is
+/// no session to ask (lock() drops it), only the open path remains.
+pub(crate) fn vault_id_at(path: &str) -> Result<u64, String> {
+    let vdir = VaultDir::new(std::path::Path::new(path).to_path_buf());
+    let meta_str = std::fs::read_to_string(&vdir.meta_path)
+        .map_err(|_| "vault not found".to_string())?;
+    let meta: VaultMeta = serde_json::from_str(&meta_str)
+        .map_err(|_| "vault corrupted".to_string())?;
+    Ok(vault_id_from_meta(&meta))
+}
+
 fn vault_id_from_meta(meta: &VaultMeta) -> u64 {
     let mut hasher = DefaultHasher::new();
     meta.hash(&mut hasher);
@@ -371,14 +399,14 @@ pub struct BackupHistoryEntry {
 }
 
 /// Open the DB for the vault at `session.current_path()`.
-fn open_db_for_session(session: &SessionManager) -> Result<Db, String> {
+pub(crate) fn open_db_for_session(session: &SessionManager) -> Result<Db, String> {
     let path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
     crate::database::Db::open(&std::path::Path::new(&path).join("vault.db"))
         .map_err(|e| e.to_string())
 }
 
 /// Get the MVK from the active session.
-fn with_mvk<F, R>(session: &SessionManager, f: F) -> Result<R, String>
+pub(crate) fn with_mvk<F, R>(session: &SessionManager, f: F) -> Result<R, String>
 where
     F: FnOnce(&[u8; 32]) -> R,
 {
@@ -445,7 +473,7 @@ pub fn vault_backup_verify(
             })
         }
         None => {
-            // Session locked — partial verification only.
+            // Session locked â€” partial verification only.
             let bi = crate::backup::verify::verify_backup(None, &backup_path)
                 .map_err(|e| e.to_string())?;
             Ok(BackupInfo {
@@ -499,5 +527,136 @@ pub fn vault_backup_history(
             created_at_unix: e.created_at_unix,
         })
         .collect())
+}
+
+// ---- Slice C: activity / auto-lock / credential rotation / danger zone ----
+
+/// Record user activity (called by the frontend heartbeat and by vault
+/// commands) so the auto-lock watcher treats the session as active.
+pub fn vault_activity(session: Arc<SessionManager>) -> Result<(), String> {
+    if session.is_locked() {
+        return Err("vault is locked".to_string());
+    }
+    session.touch_activity();
+    Ok(())
+}
+
+/// Set the auto-lock idle timeout in seconds (0 = never). Applies to the
+/// running watcher immediately; persisted by the frontend and re-applied
+/// on next launch.
+pub fn auto_lock_set(secs: u64) -> Result<(), String> {
+    crate::auth::auto_lock::set_timeout(secs);
+    Ok(())
+}
+
+fn valid_pin(pin: &str) -> bool {
+    (4..=6).contains(&pin.len()) && pin.bytes().all(|b| b.is_ascii_digit())
+}
+
+fn read_meta(path: &str) -> Result<(VaultMeta, VaultDir, std::path::PathBuf), String> {
+    let vdir = VaultDir::new(std::path::Path::new(path).to_path_buf());
+    let meta_str = std::fs::read_to_string(&vdir.meta_path)
+        .map_err(|_| "vault not found".to_string())?;
+    let meta: VaultMeta =
+        serde_json::from_str(&meta_str).map_err(|_| "vault corrupted".to_string())?;
+    let root = std::path::PathBuf::from(path);
+    Ok((meta, vdir, root))
+}
+
+/// Write vault.meta atomically (temp + rename + fsync), as vault_create does.
+fn write_meta(vdir: &VaultDir, meta: &VaultMeta) -> Result<(), String> {
+    let meta_json = meta.serialize().map_err(|e| e.to_string())?;
+    let tmp_path = vdir.meta_path.with_extension("meta.tmp");
+    std::fs::write(&tmp_path, &meta_json).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp_path, &vdir.meta_path).map_err(|e| e.to_string())?;
+    crate::storage::vault_dir::fsync_dir(&vdir.blobs_dir).map_err(|e| e.to_string())
+}
+
+/// Rotate the vault PIN: verify the current PIN, re-wrap the MVK under the
+/// new one. Other wrapped entries (password, recovery) are untouched.
+pub fn vault_change_pin(
+    current_pin: String,
+    new_pin: String,
+    session: Arc<SessionManager>,
+) -> Result<(), String> {
+    if session.is_locked() {
+        return Err("vault is locked".to_string());
+    }
+    let path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
+    if !valid_pin(&new_pin) {
+        return Err("PIN must be 4-6 digits".to_string());
+    }
+    // Verify the current PIN first — never rotate a credential we couldn't
+    // have authenticated with.
+    crate::auth::pin::unlock_with_pin(std::path::Path::new(&path), current_pin.as_bytes())
+        .map_err(|_| "Invalid PIN".to_string())?;
+
+    with_mvk(&session, |mvk| -> Result<(), String> {
+        let (mut meta, vdir, _) = read_meta(&path)?;
+        let mvk_obj = crate::crypto::mvk::Mvk::from_array(*mvk);
+        meta.add_pin_entry(new_pin.as_bytes(), &mvk_obj)
+            .map_err(|e| e.to_string())?;
+        write_meta(&vdir, &meta)
+    })?
+}
+
+/// Rotate the vault password: verify current, re-wrap MVK under the new one.
+pub fn vault_change_password(
+    current_password: String,
+    new_password: String,
+    session: Arc<SessionManager>,
+) -> Result<(), String> {
+    if session.is_locked() {
+        return Err("vault is locked".to_string());
+    }
+    let path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
+    if new_password.len() < 8 {
+        return Err("Password must be at least 8 characters".to_string());
+    }
+    crate::auth::password::unlock_with_password(
+        std::path::Path::new(&path),
+        current_password.as_bytes(),
+    )
+    .map_err(|_| "Invalid password".to_string())?;
+
+    with_mvk(&session, |mvk| -> Result<(), String> {
+        let (mut meta, vdir, _) = read_meta(&path)?;
+        let mvk_obj = crate::crypto::mvk::Mvk::from_array(*mvk);
+        meta.add_password_entry(new_password.as_bytes(), &mvk_obj)
+            .map_err(|e| e.to_string())?;
+        write_meta(&vdir, &meta)
+    })?
+}
+
+/// Clear the backup history table (Settings → Security). Does NOT touch
+/// backup files on disk.
+pub fn vault_backup_history_clear(session: Arc<SessionManager>) -> Result<(), String> {
+    let db = open_db_for_session(&session)?;
+    db.conn()
+        .execute("DELETE FROM backup_history", [])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Danger zone: delete the entire vault directory after re-verifying the
+/// PIN. The PIN check happens BEFORE any bytes are removed. Permanently
+/// destroys all encrypted files — backup files elsewhere are untouched.
+pub fn vault_delete(pin: String, session: Arc<SessionManager>) -> Result<(), String> {
+    if session.is_locked() {
+        return Err("vault is locked".to_string());
+    }
+    let path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
+
+    // 1. Verify the credential before touching any data.
+    crate::auth::pin::unlock_with_pin(std::path::Path::new(&path), pin.as_bytes())
+        .map_err(|_| "Invalid PIN".to_string())?;
+
+    // 2. Drop the session first: no open handles should sit inside the
+    //    directory we are about to remove.
+    session.lock();
+
+    // 3. Remove everything.
+    std::fs::remove_dir_all(&path).map_err(|e| format!("Failed to delete vault: {e}"))?;
+    Ok(())
 }
 
