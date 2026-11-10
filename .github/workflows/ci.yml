@@ -15,6 +15,14 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Create placeholder frontend dist for Tauri compile-time checks
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path ./dist | Out-Null
+          if (-not (Test-Path ./dist/index.html)) {
+            Set-Content -Path ./dist/index.html -Value '<!doctype html><html><body>CI placeholder</body></html>'
+          }
+
       - name: Run cargo test (workspace, non-ignored)
         working-directory: ./src-tauri
         run: cargo test --workspace
