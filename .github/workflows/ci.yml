@@ -44,5 +44,5 @@ jobs:
       - name: Run frontend tests
         run: pnpm test
 
-      - name: Tauri build
-        run: pnpm tauri build
+      - name: Frontend build
+        run: pnpm build
