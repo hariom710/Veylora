@@ -1,6 +1,28 @@
 @echo off
-set PATH=C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.50.35717\bin\Hostx64\x64;%PATH%
-set INCLUDE=C:\Program Files\Microsoft Visual Studio\18\Community\SDK\ScopeCppSDK\vc15\VC\include;C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\ucrt;C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um;C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared;%INCLUDE%
-set LIB=C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.50.35717\lib\onecore\x64;C:\Program Files (x86)\Windows Kits\10\Lib\10.0.26100.0\um\x64;C:\Program Files (x86)\Windows Kits\10\Lib\10.0.26100.0\ucrt\x64;%LIB%
+setlocal
+
+rem Locate the MSVC toolchain via vswhere instead of a hardcoded path, so this
+rem survives Visual Studio updates and fails loudly when the toolchain is gone.
+set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+if not exist "%VSWHERE%" goto :no_toolchain
+
+set "VSINSTALL="
+for /f "usebackq delims=" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
+if not defined VSINSTALL goto :no_toolchain
+
+if not exist "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" goto :no_toolchain
+call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+if errorlevel 1 goto :no_toolchain
+
 cd /d D:\projets\Veylora\src-tauri
+if errorlevel 1 exit /b 1
 cargo %*
+exit /b %errorlevel%
+
+:no_toolchain
+echo.
+echo ERROR: No MSVC C++ toolchain found.
+echo Install "Build Tools for Visual Studio" with the "Desktop development with C++"
+echo workload, then re-run this script.
+echo.
+exit /b 1

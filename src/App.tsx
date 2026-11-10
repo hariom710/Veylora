@@ -87,21 +87,10 @@ function AppContentInner() {
       /* ignore */
     }
 
-    const path = storedVaultPath();
-    if (path) {
-      const result = await vaultOpen(path);
-      if (!result.ok) {
-        // Vault moved or deleted: fall back to create/open.
-        try {
-          window.localStorage.removeItem(VAULT_PATH_KEY);
-        } catch {
-          /* ignore */
-        }
-        setHasOpenVault(false);
-        setIsLocked(true);
-        return;
-      }
-    }
+    // Never auto-open a remembered vault on cold start: the flow is
+    // Login → Welcome (Create/Open) → Unlock, so a fresh launch must land on
+    // Welcome. The stored path is opened explicitly by Welcome (Open) and by
+    // handleLock (after a lock within the same session).
     await checkStatus();
   }
 

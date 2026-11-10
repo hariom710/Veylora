@@ -244,6 +244,13 @@ Status: fixes applied (frontend assets + dialog plugin); smoke test in progress
   background): `src/index.css` defines no shadcn tokens, so `bg-background` was a
   no-op. Fixed in src/components/ui/input.tsx with explicit dark utilities
   (border-slate-700 bg-slate-900 text-slate-50 …).
+- Cold start skipped the Welcome homepage: `App.tsx` `boot()` auto-opened the
+  remembered `veylora.vaultPath`, so `vaultStatus` reported `vault_open: true`
+  and the gate rendered Unlock instead of Welcome (a remembered vault also
+  rejected any PIN the user had not set for it). Per the UI-flow diagram
+  (Login → Welcome → Create/Open → Unlock), `boot()` no longer opens any vault;
+  the stored path is opened only by Welcome ("Open") and by `handleLock` within
+  the same session. Covered by first-run.test.tsx and phase9-login.test.tsx.
 
 ### Disclosures
 - rusqlite 0.41 migration: u64 → i64 casts added in streaming/handler.rs and
