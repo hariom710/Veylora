@@ -113,6 +113,24 @@ fn sliceb_import_list_export_folder_rename_delete_roundtrip() {
     assert_eq!(written as usize, original.len());
     assert_eq!(std::fs::read(&dest).unwrap(), original);
 
+    // Preview roundtrip: the vault:// protocol path returns the exact source
+    // bytes (this is what the image/PDF/video viewers load).
+    let token = session.token();
+    let fid = &imported[0].file_id;
+    let full = files::file_preview(format!("vault://file/{fid}?token={token}"), session.clone())
+        .expect("preview should succeed");
+    assert_eq!(full, original, "preview bytes must equal the source file");
+    // Inclusive range [4,8] = 5 bytes, identical slice of the source.
+    let ranged = files::file_preview(
+        format!("vault://file/{fid}?token={token}&range=4-8"),
+        session.clone(),
+    )
+    .expect("ranged preview");
+    assert_eq!(ranged, original[4..=8].to_vec());
+    // Wrong token is rejected (mapped to 403 by the protocol layer).
+    assert!(files::file_preview(format!("vault://file/{fid}?token=deadbeef"), session.clone())
+        .is_err());
+
     // Folder creation + import into it.
     let folder = files::folder_create("Docs".to_string(), None, session.clone())
         .expect("folder_create");

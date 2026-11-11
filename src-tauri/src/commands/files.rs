@@ -197,6 +197,107 @@ pub fn file_export(
     Ok(written)
 }
 
+/// Decrypt a file (or an inclusive byte range) for the `vault://` protocol —
+/// what the image/PDF/video viewers load. Bytes go straight into the HTTP
+/// response in memory; nothing is written to disk (unlike file_export).
+/// Same recipe as file_export: lock gate → token → row → FileKey → read_range.
+pub fn file_preview(
+    url: String,
+    session: Arc<SessionManager>,
+) -> Result<Vec<u8>, String> {
+    // vault://file/<32-hex>?token=<hex>&range=<start>-<end>. The range is
+    // optional; end is inclusive and clamped to the file (mirrors the URL
+    // contract in streaming/url.rs, but accepts the 32-hex ids that
+    // file_import actually mints).
+    let rest = url
+        .strip_prefix("vault://file/")
+        .ok_or_else(|| "invalid URL".to_string())?;
+    let (path, query) = rest.split_once('?').unwrap_or((rest, ""));
+    if path.len() != 32 || !path.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("invalid file id".to_string());
+    }
+
+    let mut token = String::new();
+    let mut range: Option<(u64, Option<u64>)> = None;
+    for part in query.split('&').filter(|p| !p.is_empty()) {
+        let Some((key, value)) = part.split_once('=') else {
+            continue;
+        };
+        match key {
+            "token" => token = value.to_string(),
+            "range" => {
+                let (start, end) = value
+                    .split_once('-')
+                    .ok_or_else(|| "invalid range".to_string())?;
+                let start: u64 = start
+                    .parse()
+                    .map_err(|_| "invalid range".to_string())?;
+                let end = if end.is_empty() {
+                    None
+                } else {
+                    Some(end.parse::<u64>().map_err(|_| "invalid range".to_string())?)
+                };
+                range = Some((start, end));
+            }
+            _ => {}
+        }
+    }
+
+    // Order matches streaming/handler.rs: lock, then constant-time token.
+    if session.is_locked() {
+        return Err("vault is locked".to_string());
+    }
+    if !session.validate_token(&token) {
+        return Err("invalid token".to_string());
+    }
+    let vault_root = std::path::PathBuf::from(require_unlocked(&session)?);
+    let db = super::open_db_for_session(&session)?;
+    // Row-existence gate: never serve an orphan blob (a crash between
+    // write_blob and insert_file can leave one behind).
+    let known: i64 = db
+        .conn()
+        .query_row(
+            "SELECT COUNT(*) FROM encrypted_files WHERE file_id = ?1",
+            [path],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if known == 0 {
+        return Err("file not found".to_string());
+    }
+    let file_id = hex_decode(path).ok_or_else(|| "invalid file id".to_string())?;
+
+    // Key material stays inside the closure (zeroized on drop with FileKey).
+    let bytes = super::with_mvk(&session, |mvk| -> Result<Vec<u8>, String> {
+        let file_key = FileKey::derive(&Mvk::from_array(*mvk), &file_id)
+            .map_err(|e| e.to_string())?;
+        let vdir = crate::storage::vault_dir::VaultDir::new(vault_root.clone());
+        let blob_path = vdir.blob_path(&file_id);
+        let data = std::fs::read(&blob_path).map_err(|e| format!("cannot read blob: {e}"))?;
+        let (header, _) = read_header(&data, &file_key)
+            .map_err(|e| format!("corrupted blob: {e}"))?;
+        let total = header.total_length;
+        if total == 0 {
+            return Ok(Vec::new());
+        }
+        let (start, end_inclusive) = match range {
+            None => (0, total - 1),
+            Some((s, None)) => (s, total - 1),
+            Some((s, Some(e))) => (s, e.min(total - 1)),
+        };
+        if start > end_inclusive {
+            return Err("invalid range".to_string());
+        }
+        if start >= total {
+            return Err("range out of bounds".to_string());
+        }
+        // read_range takes a half-open [start, end); the URL range is inclusive.
+        read_range(&data, start, end_inclusive + 1, &file_key)
+            .map_err(|e| format!("decryption failed: {e}"))
+    })??;
+    Ok(bytes)
+}
+
 /// Delete the DB row and the blob (permanent — no recycle bin).
 pub fn file_delete(id: u64, session: Arc<SessionManager>) -> Result<(), String> {
     let vault_root = require_unlocked(&session)?;

@@ -273,11 +273,19 @@ pub fn vault_status(
     let locked = session.is_locked();
     let vault_id = session.vault_id();
 
+    // Real counts from the open vault (plaintext columns, no key needed).
+    // No open vault (fresh start / just locked) or a query failure → zeros,
+    // never an error: the status poll must always answer.
+    let (file_count, storage_used) = match open_db_for_session(&session) {
+        Ok(db) => crate::database::files::file_stats(&db).unwrap_or((0, 0)),
+        Err(_) => (0, 0),
+    };
+
     Ok(StatusInfo {
         locked,
         vault_id,
-        file_count: 0,
-        storage_used: 0,
+        file_count,
+        storage_used,
         vault_open: session.current_path().is_some(),
     })
 }

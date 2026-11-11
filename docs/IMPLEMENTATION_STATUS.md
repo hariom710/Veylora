@@ -284,6 +284,38 @@ Status: fixes applied (frontend assets + dialog plugin); smoke test in progress
   installed build via CDP screenshots (login, welcome, unlock tabs,
   dashboard/nav). 56/56 frontend tests still pass; copy, roles and flow
   untouched.
+- Unlock stranded the UI on the Unlock screen (release blocker found by the
+  final smoke test): the Unlock screen authenticated correctly, then passed
+  the **session token** to `App.handleUnlock`, which replayed it as a PIN via
+  a second `vaultUnlockPin(token)` call. That call always fails against the
+  real backend, so `setIsLocked(false)` never ran — backend `locked:false`
+  while the UI stayed on Unlock (and each attempt logged a phantom throttle
+  failure). Present since baf8f2f; hidden in CI because tests mock
+  `vaultUnlockPin` to always succeed. Fixed: `handleUnlock` now just records
+  the token and flips the lock state (same pattern as
+  `handleRecoveryContinue`); the duplicate imports were removed. Regression:
+  phase6-token-rotation.test.tsx now asserts `vaultUnlockPin` is called
+  exactly once, with the PIN, per unlock.
+- File viewers showed nothing (release blocker found by the final smoke
+  test, three stacked causes): (1) WebView2/wry only intercepts
+  `http://vault.*` — raw `vault://` subresources never reach the handler, so
+  `vaultUrl.ts` now emits `http://vault.localhost/file/...` (wry reverts it
+  to `vault://localhost/...`; `main.rs` strips the `localhost/` segment so
+  the frozen parser sees `vault://file/...`); (2) the response lacked
+  `Access-Control-Allow-Origin`, so the browser hid decrypted bytes from JS
+  fetch — the closure now echoes the request `Origin` header; (3) the frozen
+  `streaming/*` scaffolding cannot serve production data (`decrypt_chunk`
+  returns dummy bytes; its tests use 64-hex ids while `file_import` mints
+  32-hex ids, so the parser 400s on every real file). Fix without touching
+  the freeze: new `file_preview` in `commands/files.rs` (sibling of
+  `file_export` — lock gate → constant-time token → row-existence gate →
+  `FileKey::derive` → `read_range`, bytes in memory only), called by the
+  `main.rs` protocol closure with the same status map as
+  `streaming/protocol.rs` (403/404/400/416/500). Phase 5 tests untouched
+  and green. Also fixed: `vault_status` hardcoded `file_count:0` — now
+  `file_stats()` (COUNT + SUM of plaintext `encrypted_size`, no key),
+  zeros only when no vault is open. Regression: preview roundtrip asserts
+  in sliceb_files.rs (full bytes, inclusive range, wrong token rejected).
 
 ### Disclosures
 - rusqlite 0.41 migration: u64 → i64 casts added in streaming/handler.rs and

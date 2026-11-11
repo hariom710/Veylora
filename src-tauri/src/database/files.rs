@@ -293,6 +293,18 @@ pub fn list_files(
     Ok(records)
 }
 
+/// Total file count and encrypted bytes across all folders. Both columns are
+/// plaintext, so this needs no metadata key (works before unlock as well).
+pub fn file_stats(db: &Db) -> Result<(u64, u64), DbError> {
+    let (count, total): (i64, i64) = db.conn.query_row(
+        "SELECT COUNT(*), COALESCE(SUM(encrypted_size), 0) FROM encrypted_files",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )
+    .map_err(DbError::from)?;
+    Ok((count as u64, total as u64))
+}
+
 /// Most recently imported files across all folders, newest first.
 pub fn list_recent(
     db: &Db,
@@ -528,6 +540,16 @@ mod tests {
 
         let children = list_files(&db, &metadata_key, Some(folder_id)).expect("list children");
         assert_eq!(children.len(), 2);
+    }
+
+    #[test]
+    fn file_stats_counts_all_folders() {
+        let (db, metadata_key, _tmp) = setup_db();
+        assert_eq!(file_stats(&db).unwrap(), (0, 0));
+        insert_file(&db, &metadata_key, 1, "f1", "a.txt", None, 10).unwrap();
+        let folder_id = insert_folder(&db, &metadata_key, 1, None, "d").unwrap();
+        insert_file(&db, &metadata_key, 1, "f2", "b.txt", Some(folder_id), 20).unwrap();
+        assert_eq!(file_stats(&db).unwrap(), (2, 30));
     }
 
     #[test]

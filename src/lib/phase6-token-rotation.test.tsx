@@ -68,6 +68,11 @@ describe('phase6_token_rotates_after_lock_unlock', () => {
     // Should navigate to dashboard (unlocked)
     expect(screen.getByRole('heading', { name: /Dashboard/i })).toBeInTheDocument();
     expect(screen.queryByText(/Unlock Vault/i)).not.toBeInTheDocument();
+    // Exactly one credential check per unlock: a second call would be the
+    // session token replayed as a PIN, which always fails against the real
+    // backend and strands the UI on the Unlock screen.
+    expect(vaultUnlockPin).toHaveBeenCalledTimes(1);
+    expect(vaultUnlockPin).toHaveBeenCalledWith('1234');
 
     // Lock the vault
     vaultLock.mockResolvedValue({ ok: true, data: undefined });

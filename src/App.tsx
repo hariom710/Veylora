@@ -19,9 +19,6 @@ import {
   vaultStatus,
   vaultOpen,
   vaultGetSessionToken,
-  vaultUnlockPin,
-  vaultUnlockPassword,
-  vaultUnlockRecovery,
   vaultLock,
   vaultActivity,
   autoLockSet,
@@ -106,17 +103,12 @@ function AppContentInner() {
     }
   }
 
-  async function handleUnlock(method: 'pin' | 'password' | 'recovery', value: string) {
-    let result;
-    if (method === 'pin') result = await vaultUnlockPin(value);
-    else if (method === 'password') result = await vaultUnlockPassword(value);
-    else result = await vaultUnlockRecovery(value);
-
-    if (result.ok) {
-      const { data: token } = await vaultGetSessionToken();
-      setSessionToken(token);
-      setIsLocked(false);
-    }
+  // The Unlock screen already authenticated and fetched the session token;
+  // re-unlocking here with the token as a credential would always fail and
+  // strand the UI on the Unlock screen while the backend stays unlocked.
+  function handleUnlock(_method: string, token: string) {
+    if (token) setSessionToken(token);
+    setIsLocked(false);
   }
 
   async function handleLock() {

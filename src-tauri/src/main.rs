@@ -5,11 +5,8 @@
 
 use tauri::generate_context;
 use std::sync::Arc;
-use std::path::Path;
 
 use veylora::auth::session::SessionManager;
-use veylora::database::Db;
-use veylora::storage::vault_dir::VaultDir;
 
 #[tauri::command]
 fn vault_status_cmd(
@@ -331,19 +328,50 @@ fn main() {
         .manage(manager.clone())
         .manage(app_auth)
         .register_uri_scheme_protocol("vault", move |_app, request| {
-            let current_path = manager.current_path().unwrap_or_default();
-            let vault_dir_path = Path::new(&current_path).parent().unwrap_or(Path::new(""));
-            let db = match Db::open(vault_dir_path) {
-                Ok(d) => d,
-                Err(_) => return tauri::http::Response::builder()
-                    .status(500)
-                    .body(Vec::new())
-                    .unwrap(),
+            // wry reverts http://vault.localhost/... to vault://localhost/...;
+            // the streaming parser expects vault://file/..., so drop the host.
+            let (mut parts, body) = request.into_parts();
+            let rewritten = parts
+                .uri
+                .to_string()
+                .replacen("vault://localhost/", "vault://", 1);
+            if let Ok(uri) = rewritten.parse() {
+                parts.uri = uri;
+            }
+            let origin = parts.headers.get(tauri::http::header::ORIGIN).cloned();
+            let request = tauri::http::Request::from_parts(parts, body);
+
+            // Same status map as streaming/protocol.rs so vaultFetch's 403
+            // handling (treat as unauthorized) behaves identically.
+            let (status, body): (u16, Vec<u8>) = match veylora::commands::files::file_preview(
+                request.uri().to_string(),
+                manager.clone(),
+            ) {
+                Ok(bytes) => (200, bytes),
+                Err(e) => {
+                    let code = match e.as_str() {
+                        "vault is locked" | "no vault open" | "invalid token" => 403,
+                        "file not found" => 404,
+                        "invalid URL" | "invalid file id" | "invalid range" => 400,
+                        _ if e.starts_with("range out of bounds") => 416,
+                        _ => 500,
+                    };
+                    (code, Vec::new())
+                }
             };
-            let dir = VaultDir::new(vault_dir_path.to_path_buf());
-            veylora::streaming::protocol::handle_protocol_request(
-                &manager, &db, &dir, request,
-            )
+            let mut response = tauri::http::Response::builder()
+                .status(status)
+                .body(body)
+                .unwrap();
+            // The app window is cross-origin to http://vault.localhost; without
+            // ACAO the browser hides decrypted bytes from JS fetch (PDF/preview).
+            if let Some(origin) = origin {
+                response.headers_mut().insert(
+                    tauri::http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                    origin,
+                );
+            }
+            response
         })
         .invoke_handler(tauri::generate_handler![
             vault_status_cmd,
