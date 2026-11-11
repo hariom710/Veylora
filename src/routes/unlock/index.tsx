@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardTitle, CardHeader } from '@/components/ui/card';
 import {
   vaultUnlockPin,
   vaultUnlockPassword,
@@ -43,38 +42,37 @@ export default function Unlock({ onUnlock }: { onUnlock: (method: string, value:
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950">
-      <div className="w-full max-w-md p-8 bg-slate-900 border border-slate-800 rounded-lg shadow-xl">
-        <Card>
-          <CardHeader>
-            <CardTitle>Unlock Vault</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex gap-2">
-              <Button
-                variant={method === 'pin' ? 'default' : 'outline'}
-                onClick={() => setMethod('pin')}
-                size="sm"
-              >
-                PIN
-              </Button>
-              <Button
-                variant={method === 'password' ? 'default' : 'outline'}
-                onClick={() => setMethod('password')}
-                size="sm"
-              >
-                Password
-              </Button>
-              <Button
-                variant={method === 'recovery' ? 'default' : 'outline'}
-                onClick={() => setMethod('recovery')}
-                size="sm"
-              >
-                Recovery
-              </Button>
-            </div>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-6">
+      <div className="text-center mb-8">
+        <div className="text-title-1 text-foreground">Veylora</div>
+      </div>
+      <div className="w-full max-w-md p-8 bg-surface border border-border rounded-card">
+        <h1 className="text-title-2 text-foreground text-center mb-6">Unlock Vault</h1>
 
-            <form onSubmit={handleUnlock} className="space-y-4">
+        <div className="flex gap-6 border-b border-border mb-6">
+          {(
+            [
+              ['pin', 'PIN'],
+              ['password', 'Password'],
+              ['recovery', 'Recovery'],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMethod(m)}
+              className={`pb-3 -mb-px text-body-sm font-medium transition-colors ${
+                method === m
+                  ? 'text-foreground border-b-2 border-accent'
+                  : 'text-muted hover:text-foreground border-b-2 border-transparent'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <form onSubmit={handleUnlock} className="space-y-4">
               {method === 'pin' && (
                 <div className="space-y-2">
                   <Label htmlFor="pin">PIN</Label>
@@ -115,16 +113,14 @@ export default function Unlock({ onUnlock }: { onUnlock: (method: string, value:
                 </div>
               )}
               {error && (
-                <div className="text-sm text-destructive-foreground bg-destructive/10 p-3 rounded">
+                <div className="text-sm text-danger bg-danger/10 p-3 rounded-input">
                   {error}
                 </div>
               )}
-              <Button type="submit" disabled={loading} className="w-full bg-primary text-primary-foreground">
+              <Button type="submit" disabled={loading} className="w-full mt-2">
                 {loading ? 'Unlocking...' : 'Unlock'}
               </Button>
-            </form>
-          </CardContent>
-        </Card>
+          </form>
       </div>
     </div>
   );

@@ -110,7 +110,7 @@ export default function Backup() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 p-8">
+    <div className="min-h-screen bg-background p-8">
       <div className="max-w-md mx-auto">
         <Card>
           <CardHeader>
@@ -119,15 +119,15 @@ export default function Backup() {
           <CardContent>
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm text-slate-400">Backup Destination</label>
+                <label className="text-sm text-muted">Backup Destination</label>
                 <input
                   type="text"
                   placeholder="Backup destination path"
                   value={backupDest}
                   onChange={(e) => setBackupDest(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200"
+                  className="w-full bg-surface border border-border rounded-input px-3 py-2 text-body text-foreground"
                 />
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-caption text-muted-foreground mt-1">
                   Enter a full filesystem path (e.g., C:\Users\Name\Backups\myvault.vey)
                 </p>
                 <Button variant="outline" size="sm" onClick={pickBackupDest}>
@@ -151,13 +151,13 @@ export default function Backup() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm text-slate-400">Restore Source</label>
+                <label className="text-sm text-muted">Restore Source</label>
                 <input
                   type="text"
                   placeholder="Backup file to restore"
                   value={restoreSource}
                   onChange={(e) => setRestoreSource(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200"
+                  className="w-full bg-surface border border-border rounded-input px-3 py-2 text-body text-foreground"
                 />
                 <Button variant="outline" size="sm" onClick={pickRestoreSource}>
                   Browse…
@@ -171,40 +171,40 @@ export default function Backup() {
               </Button>
 
               {message && (
-                <div className="p-3 rounded bg-slate-800/50 border border-slate-700 text-sm">
+                <div className="p-3 rounded-input bg-elevated/50 border border-border text-sm">
                   {message}
                 </div>
               )}
 
               {backupInfo && (
-                <div className="mt-4 p-3 bg-green-900/20 border border-green-500/30 rounded">
-                  <div className="text-sm text-green-400">Backup Info</div>
-                  <div className="text-xs text-slate-400">
+                <div className="mt-4 p-3 bg-success/10 border border-success/30 rounded-input">
+                  <div className="text-sm text-success">Backup Info</div>
+                  <div className="text-caption text-muted">
                     Files: {backupInfo.file_count} | Size: {backupInfo.total_size} bytes | Verified: {backupInfo.verified_fields.join(', ')}
                   </div>
                 </div>
               )}
 
               {restoreInfo && (
-                <div className="mt-4 p-3 bg-green-900/20 border border-green-500/30 rounded">
-                  <div className="text-sm text-green-400">Restore Info</div>
-                  <div className="text-xs text-slate-400">
+                <div className="mt-4 p-3 bg-success/10 border border-success/30 rounded-input">
+                  <div className="text-sm text-success">Restore Info</div>
+                  <div className="text-caption text-muted">
                     Files: {restoreInfo.files_restored} | Bytes: {restoreInfo.bytes_written}
                   </div>
                 </div>
               )}
 
               <div className="mt-6">
-                <h3 className="text-sm text-slate-400 mb-2">Backup History</h3>
+                <h3 className="text-sm text-muted mb-2">Backup History</h3>
                 <Button onClick={loadHistory} variant="outline" size="sm">
                   Refresh History
                 </Button>
                 <div className="mt-2">
                   {history.length === 0 && (
-                    <div className="text-xs text-slate-500">No backup history</div>
+                    <div className="text-caption text-muted-foreground">No backup history</div>
                   )}
                   {history.map((entry, i) => (
-                    <div key={i} className="text-xs text-slate-400 truncate">
+                    <div key={i} className="text-caption text-muted truncate">
                       {entry.path} — {entry.status}
                     </div>
                   ))}

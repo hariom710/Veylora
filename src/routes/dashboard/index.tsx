@@ -67,38 +67,38 @@ export default function Dashboard({ sessionToken }: DashboardProps) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-950 p-8">
+    <div className="min-h-screen bg-background p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+          <h1 className="text-title-1">Dashboard</h1>
           <Button variant="outline" onClick={() => loadStatus()}>
             Refresh
           </Button>
         </div>
 
         {error && (
-          <div className="mb-4 text-sm text-destructive-foreground bg-destructive/10 p-3 rounded">
+          <div className="mb-4 text-sm text-danger bg-danger/10 p-3 rounded-input">
             {error}
           </div>
         )}
         {message && (
-          <div className="mb-4 text-sm text-green-300 bg-green-500/10 p-3 rounded">{message}</div>
+          <div className="mb-4 text-sm text-success bg-success/10 p-3 rounded-input">{message}</div>
         )}
 
         {loading ? (
-          <div className="text-slate-400">Loading...</div>
+          <div className="text-muted">Loading...</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card>
               <CardContent>
                 <CardTitle>Welcome back</CardTitle>
-                <p className="text-slate-400 text-sm">
+                <p className="text-muted text-sm">
                   {status?.file_count ?? 0} files encrypted
                 </p>
-                <p className="text-slate-400 text-sm">
+                <p className="text-muted text-sm">
                   Storage: {formatBytes(status?.storage_used ?? 0)}
                 </p>
-                <p className="text-slate-400 text-sm">
+                <p className="text-muted text-sm">
                   {status?.locked ? 'Locked' : 'Unlocked'}
                 </p>
               </CardContent>
@@ -116,7 +116,7 @@ export default function Dashboard({ sessionToken }: DashboardProps) {
                 >
                   Browse Files
                 </Button>
-                <div className="mt-4 border border-dashed border-slate-700 rounded-lg p-4 text-center text-xs text-slate-500">
+                <div className="mt-4 border border-dashed border-border rounded-card p-4 text-center text-caption text-muted-foreground">
                   Drag files here to import
                 </div>
               </CardContent>
@@ -124,7 +124,7 @@ export default function Dashboard({ sessionToken }: DashboardProps) {
             <Card>
               <CardContent>
                 <CardTitle>Session</CardTitle>
-                <p className="text-slate-400 text-sm break-all">
+                <p className="text-muted text-sm break-all">
                   Token: {sessionToken ? 'active' : 'none'}
                 </p>
               </CardContent>
@@ -138,12 +138,12 @@ export default function Dashboard({ sessionToken }: DashboardProps) {
               <CardContent>
                 <CardTitle>Recent</CardTitle>
                 {recent.length === 0 && (
-                  <p className="text-slate-500 text-sm">Nothing imported yet</p>
+                  <p className="text-muted-foreground text-sm">Nothing imported yet</p>
                 )}
                 {recent.map((file) => (
                   <div key={file.id} className="flex justify-between text-sm py-1">
-                    <span className="text-slate-300 truncate mr-2">{file.filename}</span>
-                    <span className="text-slate-500">{formatBytes(file.encrypted_size)}</span>
+                    <span className="text-foreground truncate mr-2">{file.filename}</span>
+                    <span className="text-muted-foreground">{formatBytes(file.encrypted_size)}</span>
                   </div>
                 ))}
               </CardContent>
@@ -152,12 +152,12 @@ export default function Dashboard({ sessionToken }: DashboardProps) {
               <CardContent>
                 <CardTitle>Favorites</CardTitle>
                 {favorites.length === 0 && (
-                  <p className="text-slate-500 text-sm">No starred files yet</p>
+                  <p className="text-muted-foreground text-sm">No starred files yet</p>
                 )}
                 {favorites.map((file) => (
                   <div key={file.id} className="flex justify-between text-sm py-1">
-                    <span className="text-slate-300 truncate mr-2">{file.filename}</span>
-                    <span className="text-slate-500">{formatBytes(file.encrypted_size)}</span>
+                    <span className="text-foreground truncate mr-2">{file.filename}</span>
+                    <span className="text-muted-foreground">{formatBytes(file.encrypted_size)}</span>
                   </div>
                 ))}
               </CardContent>

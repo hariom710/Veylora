@@ -243,7 +243,8 @@ Status: fixes applied (frontend assets + dialog plugin); smoke test in progress
 - Login/signup password field rendered invisible (white text on a white UA input
   background): `src/index.css` defines no shadcn tokens, so `bg-background` was a
   no-op. Fixed in src/components/ui/input.tsx with explicit dark utilities
-  (border-slate-700 bg-slate-900 text-slate-50 …).
+  (border-slate-700 bg-slate-900 text-slate-50 …; since replaced by the design
+  tokens below).
 - Cold start skipped the Welcome homepage: `App.tsx` `boot()` auto-opened the
   remembered `veylora.vaultPath`, so `vaultStatus` reported `vault_open: true`
   and the gate rendered Unlock instead of Welcome (a remembered vault also
@@ -251,6 +252,38 @@ Status: fixes applied (frontend assets + dialog plugin); smoke test in progress
   (Login → Welcome → Create/Open → Unlock), `boot()` no longer opens any vault;
   the stored path is opened only by Welcome ("Open") and by `handleLock` within
   the same session. Covered by first-run.test.tsx and phase9-login.test.tsx.
+- Launching the installed app opened a terminal window alongside it:
+  `main.rs` had no `windows_subsystem` attribute, so Rust linked `veylora.exe`
+  as a **console** binary (PE `Subsystem=3`). Added
+  `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` — release
+  builds are now GUI (`Subsystem=2`, verified on the shipped exe), while debug
+  builds keep the console so `tauri dev` logs stay visible.
+- Opening an existing vault required hand-typing a full Windows path (and the
+  Open form sits below the whole Create form). Welcome now shows an
+  "Open a vault" list at the top (`veylora.recentVaults`, newest first, deduped,
+  capped at 5, validated on mount via `vaultGetMeta` so a moved vault never
+  leaves a dead row; first run after update seeds it from `veylora.vaultPath`),
+  prefills the Open path from the last used vault, and adds a Browse… button to
+  the Open form. Covered by routes/welcome/index.test.tsx (8 tests); verified
+  live on the installed build via WebView2 CDP (login → list → one-click →
+  Unlock).
+- Apple-Inspired UI Design Brief, Phase 1 (frontend only — no backend, format,
+  crypto, or IPC change): `tailwind.config.ts` now carries the exact supplied
+  tokens (colors background/surface/elevated/border/foreground/muted/accent/
+  success/warning/danger; type scale display 48 … mono 13 with fixed
+  line-heights and weights 400–700; radii input/button 10, card 16, dialog 20;
+  spacing 4·8·12·16·24·32·48·64·96; boxShadow modal + focus only) and
+  `src/index.css` the base layer (dark color-scheme, focus ring, selection).
+  Inter loads locally as one .woff2 (`public/fonts/InterVariable.woff2`, no
+  Google Fonts). Every screen swept from `slate-*`/rainbow literals to tokens,
+  headings put on the exact type scale, card shadows removed (borders only),
+  and primary actions became the giant 44px / 17px-600 `#0A84FF` button —
+  including a real pre-existing bug: `button.tsx` destructured `variant`/`size`
+  without defaults, so the old no-op `bg-primary` had hidden that variant
+  styles never applied when callers omitted the prop. Verified on the
+  installed build via CDP screenshots (login, welcome, unlock tabs,
+  dashboard/nav). 56/56 frontend tests still pass; copy, roles and flow
+  untouched.
 
 ### Disclosures
 - rusqlite 0.41 migration: u64 → i64 casts added in streaming/handler.rs and

@@ -58,17 +58,17 @@ export default function Login({ onLogin }: { onLogin: (status: AppStatus) => voi
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950">
-      <div className="w-full max-w-md p-8 bg-slate-900 border border-slate-800 rounded-lg">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-primary">Veylora</h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Your Files. Your Privacy. Your Control.
-          </p>
-        </div>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-6">
+      <div className="text-center mb-12">
+        <h1 className="text-display text-foreground">Veylora</h1>
+        <p className="text-body text-muted mt-3">
+          Your Files. Your Privacy. Your Control.
+        </p>
+      </div>
 
+      <div className="w-full max-w-[400px] p-8 bg-surface border border-border rounded-card">
         {error && (
-          <div className="mb-4 text-sm text-destructive-foreground bg-destructive/10 p-3 rounded">
+          <div className="mb-4 text-sm text-danger bg-danger/10 p-3 rounded-input">
             {error}
           </div>
         )}
@@ -100,23 +100,10 @@ export default function Login({ onLogin }: { onLogin: (status: AppStatus) => voi
             <Button
               type="submit"
               disabled={loading}
-              className="w-full bg-primary text-primary-foreground"
+              className="w-full mt-2"
             >
               {loading ? 'Signing in...' : 'Sign in'}
             </Button>
-            <p className="text-sm text-slate-400 text-center">
-              Don't have an account?{' '}
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('signup');
-                  setError(null);
-                }}
-                className="text-primary hover:underline"
-              >
-                Sign up
-              </button>
-            </p>
           </form>
         ) : (
           <form onSubmit={handleSignup} className="space-y-4">
@@ -156,26 +143,27 @@ export default function Login({ onLogin }: { onLogin: (status: AppStatus) => voi
             <Button
               type="submit"
               disabled={loading}
-              className="w-full bg-primary text-primary-foreground"
+              className="w-full mt-2"
             >
               {loading ? 'Creating account...' : 'Create account'}
             </Button>
-            <p className="text-sm text-slate-400 text-center">
-              Already have an account?{' '}
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('login');
-                  setError(null);
-                }}
-                className="text-primary hover:underline"
-              >
-                Sign in
-              </button>
-            </p>
           </form>
         )}
       </div>
+
+      <p className="text-body-sm text-muted text-center mt-6">
+        {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}{' '}
+        <button
+          type="button"
+          onClick={() => {
+            setMode(mode === 'login' ? 'signup' : 'login');
+            setError(null);
+          }}
+          className="text-foreground hover:underline"
+        >
+          {mode === 'login' ? 'Sign up' : 'Sign in'}
+        </button>
+      </p>
     </div>
   );
 }

@@ -171,19 +171,19 @@ export default function Settings() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 p-8">
+    <div className="min-h-screen bg-background p-8">
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-2xl font-bold text-white mb-6">Settings</h1>
+        <h1 className="text-title-1 mb-6">Settings</h1>
 
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div className="flex flex-wrap gap-6 mb-6 border-b border-border">
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`px-4 py-2 rounded-md text-sm transition-colors ${
+              className={`pb-3 -mb-px text-body-sm font-medium transition-colors ${
                 tab === t.id
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-slate-800 text-slate-400 hover:text-white'
+                  ? 'text-foreground border-b-2 border-accent'
+                  : 'text-muted hover:text-foreground border-b-2 border-transparent'
               }`}
             >
               {t.label}
@@ -192,12 +192,12 @@ export default function Settings() {
         </div>
 
         {error && (
-          <div className="mb-4 text-sm text-destructive-foreground bg-destructive/10 p-3 rounded">
+          <div className="mb-4 text-sm text-danger bg-danger/10 p-3 rounded-input">
             {error}
           </div>
         )}
         {message && (
-          <div className="mb-4 text-sm text-green-300 bg-green-500/10 p-3 rounded">{message}</div>
+          <div className="mb-4 text-sm text-success bg-success/10 p-3 rounded-input">{message}</div>
         )}
 
         {tab === 'security' && (
@@ -212,7 +212,7 @@ export default function Settings() {
                   id="auto-lock"
                   value={autoLock}
                   onChange={(e) => handleAutoLock(Number(e.target.value))}
-                  className="mt-2 w-full h-10 rounded-md border border-input bg-slate-900 px-3 text-sm"
+                  className="mt-2 w-full h-10 rounded-button border border-border bg-surface px-3 text-sm"
                 >
                   {AUTO_LOCK_CHOICES.map((c) => (
                     <option key={c.secs} value={c.secs}>
@@ -220,7 +220,7 @@ export default function Settings() {
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-slate-500 mt-2">
+                <p className="text-caption text-muted-foreground mt-2">
                   Inactivity means no mouse or keyboard input. Relocking is checked every 30
                   seconds.
                 </p>
@@ -308,7 +308,7 @@ export default function Settings() {
                 <CardTitle>Recovery Key</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-muted">
                   Your recovery key was shown exactly once, when this vault was created. It wraps
                   your vault key one-way — Veylora cannot re-display it, by design. If you lost it,
                   your PIN and password still unlock the vault; the recovery key is only needed if
@@ -326,10 +326,10 @@ export default function Settings() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-sm">Theme</span>
-                <span className="text-sm text-slate-200">Dark (only theme in v1.0)</span>
+                <span className="text-muted text-sm">Theme</span>
+                <span className="text-sm text-foreground">Dark (only theme in v1.0)</span>
               </div>
-              <p className="text-xs text-slate-500 mt-3">
+              <p className="text-caption text-muted-foreground mt-3">
                 A light theme is planned for v1.1 — v1.0 ships dark only.
               </p>
             </CardContent>
@@ -342,25 +342,25 @@ export default function Settings() {
               <CardTitle>Storage</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2 text-sm text-slate-400">
+              <div className="space-y-2 text-sm text-muted">
                 <div className="flex justify-between">
                   <span>Files encrypted</span>
-                  <span className="text-slate-200">{status?.file_count ?? 0}</span>
+                  <span className="text-foreground">{status?.file_count ?? 0}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Vault size on disk</span>
-                  <span className="text-slate-200">
+                  <span className="text-foreground">
                     {formatBytes(status?.storage_used ?? 0)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Vault path</span>
-                  <span className="text-slate-200 break-all">
+                  <span className="text-foreground break-all">
                     {status?.path ?? status?.name ?? '—'}
                   </span>
                 </div>
               </div>
-              <p className="text-xs text-slate-500 mt-3">
+              <p className="text-caption text-muted-foreground mt-3">
                 Per-folder storage breakdown is planned for v1.1.
               </p>
             </CardContent>
@@ -373,14 +373,14 @@ export default function Settings() {
               <CardTitle>Backup</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-slate-400 mb-4">
+              <p className="text-sm text-muted mb-4">
                 Create, verify and restore backups from the Backup screen in the main navigation.
                 Veylora never runs backups automatically — every backup is something you start.
               </p>
               <Button variant="outline" onClick={handleClearHistory}>
                 Clear backup history
               </Button>
-              <p className="text-xs text-slate-500 mt-2">
+              <p className="text-caption text-muted-foreground mt-2">
                 Clears the history list only. Backup files on disk are not touched.
               </p>
             </CardContent>
@@ -393,30 +393,30 @@ export default function Settings() {
               <CardTitle>About Veylora</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2 text-sm text-slate-400">
+              <div className="space-y-2 text-sm text-muted">
                 <div className="flex justify-between">
                   <span>Version</span>
-                  <span className="text-slate-200">1.0</span>
+                  <span className="text-foreground">1.0</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Vault format</span>
-                  <span className="text-slate-200">v1 (frozen)</span>
+                  <span className="text-foreground">v1 (frozen)</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Encryption</span>
-                  <span className="text-slate-200">XChaCha20-Poly1305</span>
+                  <span className="text-foreground">XChaCha20-Poly1305</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Key derivation</span>
-                  <span className="text-slate-200">Argon2id + HKDF-SHA256</span>
+                  <span className="text-foreground">Argon2id + HKDF-SHA256</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Storage</span>
-                  <span className="text-slate-200">Local only — no cloud, ever</span>
+                  <span className="text-foreground">Local only — no cloud, ever</span>
                 </div>
                 <div className="flex justify-between">
                   <span>License</span>
-                  <span className="text-slate-200">MIT OR Apache-2.0</span>
+                  <span className="text-foreground">MIT OR Apache-2.0</span>
                 </div>
               </div>
             </CardContent>
@@ -424,12 +424,12 @@ export default function Settings() {
         )}
 
         {tab === 'danger' && (
-          <Card className="border-destructive/50">
+          <Card className="border-danger/50">
             <CardHeader>
-              <CardTitle className="text-destructive">Delete Vault</CardTitle>
+              <CardTitle className="text-danger">Delete Vault</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-slate-400 mb-4">
+              <p className="text-sm text-muted mb-4">
                 This permanently deletes the vault directory and every encrypted file inside it.
                 Backup files you created elsewhere are not affected. This cannot be undone.
               </p>

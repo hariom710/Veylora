@@ -55,17 +55,17 @@ export default function Recent({ token }: { token: string | null }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 p-8">
+    <div className="min-h-screen bg-background p-8">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-2xl font-bold text-white mb-6">Recent</h1>
+        <h1 className="text-title-1 mb-6">Recent</h1>
 
         {error && (
-          <div className="mb-4 text-sm text-destructive-foreground bg-destructive/10 p-3 rounded">
+          <div className="mb-4 text-sm text-danger bg-danger/10 p-3 rounded-input">
             {error}
           </div>
         )}
         {message && (
-          <div className="mb-4 text-sm text-green-300 bg-green-500/10 p-3 rounded">{message}</div>
+          <div className="mb-4 text-sm text-success bg-success/10 p-3 rounded-input">{message}</div>
         )}
 
         <Card>
@@ -77,11 +77,11 @@ export default function Recent({ token }: { token: string | null }) {
               {files.map((file) => (
                 <div
                   key={file.id}
-                  className="bg-slate-900 border border-slate-800 rounded-lg p-4"
+                  className="bg-surface border border-border rounded-card p-4"
                 >
-                  <div className="font-bold text-slate-100 break-all">{file.filename}</div>
-                  <div className="text-sm text-slate-400">{formatBytes(file.encrypted_size)}</div>
-                  <div className="text-xs text-slate-500 mt-1">
+                  <div className="font-bold text-foreground break-all">{file.filename}</div>
+                  <div className="text-sm text-muted">{formatBytes(file.encrypted_size)}</div>
+                  <div className="text-caption text-muted-foreground mt-1">
                     Imported {new Date(Number(file.created_at) * 1000).toLocaleString()}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -97,7 +97,7 @@ export default function Recent({ token }: { token: string | null }) {
                 </div>
               ))}
               {files.length === 0 && (
-                <div className="text-slate-400 text-center py-8 col-span-full">
+                <div className="text-muted text-center py-8 col-span-full">
                   Nothing imported yet
                 </div>
               )}

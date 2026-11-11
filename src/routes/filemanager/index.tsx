@@ -214,16 +214,16 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 p-8">
+    <div className="min-h-screen bg-background p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-white">File Manager</h1>
+          <h1 className="text-title-1">File Manager</h1>
           <div className="flex gap-4">
             <Input
               placeholder="Search files..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-64 bg-slate-800"
+              className="w-64 bg-elevated"
               ref={searchRef}
             />
             <Button onClick={handleImport} disabled={busy} data-testid="import-button">
@@ -239,13 +239,13 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
         </div>
 
         {/* Breadcrumb */}
-        <div className="flex items-center gap-2 mb-4 text-sm text-slate-400">
+        <div className="flex items-center gap-2 mb-4 text-sm text-muted">
           {crumbs.map((crumb, i) => (
             <span key={`${crumb.id}-${i}`} className="flex items-center gap-2">
               {i > 0 && <span>/</span>}
               <button
                 className={
-                  i === crumbs.length - 1 ? 'text-white font-medium' : 'hover:text-white'
+                  i === crumbs.length - 1 ? 'text-foreground font-medium' : 'hover:text-foreground'
                 }
                 onClick={() => crumbTo(i)}
               >
@@ -256,16 +256,16 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
         </div>
 
         {error && (
-          <div className="mb-4 text-sm text-destructive-foreground bg-destructive/10 p-3 rounded">
+          <div className="mb-4 text-sm text-danger bg-danger/10 p-3 rounded-input">
             {error}
           </div>
         )}
         {message && (
-          <div className="mb-4 text-sm text-green-300 bg-green-500/10 p-3 rounded">{message}</div>
+          <div className="mb-4 text-sm text-success bg-success/10 p-3 rounded-input">{message}</div>
         )}
 
         {/* Drop hint — drops are handled window-wide via Tauri's drag event */}
-        <div className="mb-6 border border-dashed border-slate-700 rounded-lg p-4 text-center text-sm text-slate-500">
+        <div className="mb-6 border border-dashed border-border rounded-card p-4 text-center text-sm text-muted-foreground">
           Drag files here from Windows Explorer to import
         </div>
 
@@ -282,10 +282,10 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
                   <button
                     key={folder.id}
                     onClick={() => enterFolder(folder)}
-                    className="text-left bg-slate-800/60 border border-slate-700 rounded-lg p-3 hover:bg-slate-800 transition-colors"
+                    className="text-left bg-elevated/60 border border-border rounded-card p-3 hover:bg-elevated transition-colors"
                   >
                     <div className="text-xl">📁</div>
-                    <div className="text-sm text-slate-200 truncate">{folder.name}</div>
+                    <div className="text-sm text-foreground truncate">{folder.name}</div>
                   </button>
                 ))}
               </div>
@@ -295,17 +295,17 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
               {filteredFiles.map((file) => (
                 <div
                   key={file.id}
-                  className={`bg-slate-900 border rounded-lg p-4 cursor-pointer ${
+                  className={`bg-surface border rounded-card p-4 cursor-pointer ${
                     selectedId === file.id
-                      ? 'border-primary ring-1 ring-primary'
-                      : 'border-slate-800'
+                      ? 'border-accent ring-1 ring-accent'
+                      : 'border-border'
                   }`}
                   onClick={() => setSelectedId(file.id)}
                   onDoubleClick={() => openFile(file)}
                   data-testid={`file-row-${file.id}`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="font-bold text-slate-100 break-all">{file.filename}</div>
+                    <div className="font-bold text-foreground break-all">{file.filename}</div>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -314,14 +314,14 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
                       aria-label={favIds.has(file.id) ? 'Unstar file' : 'Star file'}
                       title={favIds.has(file.id) ? 'Remove from favorites' : 'Add to favorites'}
                       className={`text-lg leading-none shrink-0 ${
-                        favIds.has(file.id) ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-400'
+                        favIds.has(file.id) ? 'text-warning' : 'text-muted-foreground hover:text-warning'
                       }`}
                     >
                       ★
                     </button>
                   </div>
-                  <div className="text-sm text-slate-400">{formatBytes(file.encrypted_size)}</div>
-                  <div className="text-xs text-slate-500 mt-1">
+                  <div className="text-sm text-muted">{formatBytes(file.encrypted_size)}</div>
+                  <div className="text-caption text-muted-foreground mt-1">
                     Imported {new Date(Number(file.created_at) * 1000).toLocaleString()}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -343,7 +343,7 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
                 </div>
               ))}
               {filteredFiles.length === 0 && (
-                <div className="text-slate-400 text-center py-8 col-span-full">
+                <div className="text-muted text-center py-8 col-span-full">
                   No files in this folder
                 </div>
               )}

@@ -42,20 +42,20 @@ export default function RecoveryKey({
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950">
-      <div className="w-full max-w-xl p-8 bg-slate-900 border border-slate-800 rounded-lg shadow-xl">
-        <h1 className="text-2xl font-bold text-white mb-2">Your Recovery Key</h1>
-        <p className="text-sm text-slate-400 mb-6">
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="w-full max-w-xl p-8 bg-surface border border-border rounded-card">
+        <h1 className="text-title-1 mb-2">Your Recovery Key</h1>
+        <p className="text-sm text-muted mb-6">
           This is shown exactly once. Write it down. Store it somewhere safe.
         </p>
 
-        <div className="mb-4 p-4 rounded border border-red-500/40 bg-red-500/10 text-red-300 text-sm">
+        <div className="mb-4 p-4 rounded-input border border-danger/40 bg-danger/10 text-danger text-sm">
           If you lose this key AND your PIN AND your password, your files are
           gone forever. There is no way to reset.
         </div>
 
         <div
-          className="mb-6 p-4 bg-slate-950 border border-slate-800 rounded select-all break-all font-mono text-lg text-primary"
+          className="mb-6 p-4 bg-background border border-border rounded-input select-all break-all text-mono text-foreground"
           data-testid="recovery-key"
         >
           {recoveryKey}
@@ -73,9 +73,9 @@ export default function RecoveryKey({
           </Button>
         </div>
 
-        {message && <p className="text-sm text-slate-400 mb-4">{message}</p>}
+        {message && <p className="text-sm text-muted mb-4">{message}</p>}
 
-        <label className="flex items-center gap-3 mb-6 text-sm text-slate-200">
+        <label className="flex items-center gap-3 mb-6 text-sm text-foreground">
           <input
             type="checkbox"
             checked={saved}

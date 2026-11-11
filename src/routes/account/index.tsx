@@ -109,9 +109,9 @@ export default function Account({ app, onLogout }: AccountProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 p-8">
+    <div className="min-h-screen bg-background p-8">
       <div className="max-w-3xl mx-auto space-y-6">
-        <h1 className="text-2xl font-bold text-white">Account</h1>
+        <h1 className="text-title-1">Account</h1>
 
         <Card>
           <CardHeader>
@@ -119,16 +119,16 @@ export default function Account({ app, onLogout }: AccountProps) {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-slate-400">Email</span>
-              <span className="text-slate-200">{app.email}</span>
+              <span className="text-muted">Email</span>
+              <span className="text-foreground">{app.email}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-400">Role</span>
-              <span className="text-slate-200 capitalize">{app.role}</span>
+              <span className="text-muted">Role</span>
+              <span className="text-foreground capitalize">{app.role}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-400">Logged in since</span>
-              <span className="text-slate-200">
+              <span className="text-muted">Logged in since</span>
+              <span className="text-foreground">
                 {app.logged_in_since ? formatUnix(app.logged_in_since) : '—'}
               </span>
             </div>
@@ -174,16 +174,16 @@ export default function Account({ app, onLogout }: AccountProps) {
               </div>
               {pwMessage && (
                 <div
-                  className={`text-sm p-3 rounded ${
+                  className={`text-sm p-3 rounded-input ${
                     pwMessage.ok
-                      ? 'text-green-300 bg-green-500/10'
-                      : 'text-destructive-foreground bg-destructive/10'
+                      ? 'text-success bg-success/10'
+                      : 'text-danger bg-danger/10'
                   }`}
                 >
                   {pwMessage.text}
                 </div>
               )}
-              <Button type="submit" variant="outline">
+              <Button type="submit" className="w-full">
                 Change password
               </Button>
             </form>
@@ -202,18 +202,18 @@ export default function Account({ app, onLogout }: AccountProps) {
             </CardHeader>
             <CardContent>
               {actionError && (
-                <div className="mb-3 text-sm text-destructive-foreground bg-destructive/10 p-3 rounded">
+                <div className="mb-3 text-sm text-danger bg-danger/10 p-3 rounded-input">
                   {actionError}
                 </div>
               )}
               {showAddUser && (
-                <form onSubmit={handleAddUser} className="mb-4 space-y-3 border border-slate-800 rounded p-4">
+                <form onSubmit={handleAddUser} className="mb-4 space-y-3 border border-border rounded-input p-4">
                   {addMessage && (
                     <div
-                      className={`text-sm p-2 rounded ${
+                      className={`text-sm p-2 rounded-input ${
                         addMessage.ok
-                          ? 'text-green-300 bg-green-500/10'
-                          : 'text-destructive-foreground bg-destructive/10'
+                          ? 'text-success bg-success/10'
+                          : 'text-danger bg-danger/10'
                       }`}
                     >
                       {addMessage.text}
@@ -237,7 +237,7 @@ export default function Account({ app, onLogout }: AccountProps) {
                     <select
                       value={newUserRole}
                       onChange={(e) => setNewUserRole(e.target.value)}
-                      className="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200"
+                      className="bg-elevated border border-border rounded-input px-3 py-2 text-sm text-foreground"
                     >
                       <option value="user">user</option>
                       <option value="admin">admin</option>
@@ -250,7 +250,7 @@ export default function Account({ app, onLogout }: AccountProps) {
               )}
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-slate-400 border-b border-slate-800">
+                  <tr className="text-left text-muted border-b border-border">
                     <th className="py-2">Email</th>
                     <th>Role</th>
                     <th>Created</th>
@@ -260,11 +260,11 @@ export default function Account({ app, onLogout }: AccountProps) {
                 </thead>
                 <tbody>
                   {users.map((u) => (
-                    <tr key={u.id} className="border-b border-slate-800/60">
-                      <td className="py-2 text-slate-200">{u.email}</td>
-                      <td className="text-slate-300 capitalize">{u.role}</td>
-                      <td className="text-slate-400">{formatUnix(u.created_at)}</td>
-                      <td className="text-slate-400">
+                    <tr key={u.id} className="border-b border-border/60">
+                      <td className="py-2 text-foreground">{u.email}</td>
+                      <td className="text-foreground capitalize">{u.role}</td>
+                      <td className="text-muted">{formatUnix(u.created_at)}</td>
+                      <td className="text-muted">
                         {u.last_login ? formatUnix(u.last_login) : 'never'}
                       </td>
                       <td className="text-right">

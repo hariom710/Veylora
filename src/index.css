@@ -1,9 +1,38 @@
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/InterVariable.woff2') format('woff2');
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  :root {
+    color-scheme: dark;
+  }
+
   html {
-    @apply bg-slate-950 text-slate-50;
+    @apply bg-background text-foreground antialiased;
+    overflow-x: hidden;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  *:focus-visible {
+    @apply outline-none ring-2 ring-accent;
+    box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.3);
+  }
+
+  ::selection {
+    background: rgba(10, 132, 255, 0.3);
   }
 }

@@ -29,26 +29,26 @@ export default function PDFViewer({ token, onLock }: PDFViewerProps) {
   }, [token, fileId, onLock]);
 
   if (isLocked) return <LockedModal onUnlock={onLock} />;
-  if (!token) return <div className="text-slate-400">No session token</div>;
+  if (!token) return <div className="text-muted">No session token</div>;
 
   return (
-    <div className="min-h-screen bg-slate-950 p-8">
+    <div className="min-h-screen bg-background p-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">PDF Viewer</h1>
+        <h1 className="text-title-1">PDF Viewer</h1>
         <Button onClick={onLock} variant="destructive">
           Lock Vault
         </Button>
       </div>
 
       {error && (
-        <div className="bg-destructive/10 border border-destructive/50 p-4 rounded-lg text-destructive">
+        <div className="bg-danger/10 border border-danger/50 p-4 rounded-card text-danger">
           {error}
         </div>
       )}
 
       <Card>
         <CardContent className="p-0">
-          <div className="h-[calc(100vh-200px)] w-full bg-slate-900">
+          <div className="h-[calc(100vh-200px)] w-full bg-surface">
             <iframe
               className="w-full h-full"
               src={vaultUrl(fileId || 'unknown', token)}

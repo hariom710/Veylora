@@ -1,4 +1,7 @@
 #![allow(missing_docs)]
+// Release builds are a GUI app: no console window when launched from the
+// shortcut. Debug keeps the console so tauri dev logs stay visible.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::generate_context;
 use std::sync::Arc;

@@ -11,6 +11,7 @@ vi.mock('@/lib/ipc', () => ({
   appListUsers: vi.fn(),
   vaultStatus: vi.fn(),
   vaultOpen: vi.fn(),
+  vaultGetMeta: vi.fn(),
   vaultCreate: vi.fn(),
   vaultGetSessionToken: vi.fn(),
   vaultUnlockPin: vi.fn(),

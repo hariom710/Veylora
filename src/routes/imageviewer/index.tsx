@@ -13,9 +13,9 @@ export default function ImageViewer({ token, onLock }: ImageViewerProps) {
   const { fileId = '' } = useParams();
   const src = token && fileId ? vaultUrl(fileId, token) : undefined;
   return (
-    <div className="min-h-screen bg-slate-950 p-8">
+    <div className="min-h-screen bg-background p-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">Image Viewer</h1>
+        <h1 className="text-title-1">Image Viewer</h1>
         <Button onClick={onLock} variant="destructive">Lock Vault</Button>
       </div>
 
@@ -25,7 +25,7 @@ export default function ImageViewer({ token, onLock }: ImageViewerProps) {
             {src ? (
               <img className="max-w-full max-h-full object-contain" src={src} alt="Image" />
             ) : (
-              <div className="text-slate-400">No file selected</div>
+              <div className="text-muted">No file selected</div>
             )}
           </div>
         </CardContent>

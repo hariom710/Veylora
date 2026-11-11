@@ -231,36 +231,71 @@ function AppContentInner() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50">
-      <nav className="border-b border-slate-800 bg-slate-900/80 px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-background text-foreground">
+      <nav className="border-b border-border bg-surface/80 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-6">
-          <h1 className="text-xl font-bold text-primary">Veylora</h1>
-          <NavLink to="/" className="text-sm text-slate-400 hover:text-white transition-colors">
+          <h1 className="text-title-3 text-foreground">Veylora</h1>
+          <NavLink
+            to="/"
+            className={({ isActive }) =>
+              `text-body-sm font-medium transition-colors ${isActive ? 'text-accent' : 'text-muted hover:text-foreground'}`
+            }
+          >
             Dashboard
           </NavLink>
-          <NavLink to="/filemanager" className="text-sm text-slate-400 hover:text-white transition-colors">
+          <NavLink
+            to="/filemanager"
+            className={({ isActive }) =>
+              `text-body-sm font-medium transition-colors ${isActive ? 'text-accent' : 'text-muted hover:text-foreground'}`
+            }
+          >
             Files
           </NavLink>
-          <NavLink to="/favorites" className="text-sm text-slate-400 hover:text-white transition-colors">
+          <NavLink
+            to="/favorites"
+            className={({ isActive }) =>
+              `text-body-sm font-medium transition-colors ${isActive ? 'text-accent' : 'text-muted hover:text-foreground'}`
+            }
+          >
             Favorites
           </NavLink>
-          <NavLink to="/recent" className="text-sm text-slate-400 hover:text-white transition-colors">
+          <NavLink
+            to="/recent"
+            className={({ isActive }) =>
+              `text-body-sm font-medium transition-colors ${isActive ? 'text-accent' : 'text-muted hover:text-foreground'}`
+            }
+          >
             Recent
           </NavLink>
-          <NavLink to="/backup" className="text-sm text-slate-400 hover:text-white transition-colors">
+          <NavLink
+            to="/backup"
+            className={({ isActive }) =>
+              `text-body-sm font-medium transition-colors ${isActive ? 'text-accent' : 'text-muted hover:text-foreground'}`
+            }
+          >
             Backup
           </NavLink>
-          <NavLink to="/settings" className="text-sm text-slate-400 hover:text-white transition-colors">
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              `text-body-sm font-medium transition-colors ${isActive ? 'text-accent' : 'text-muted hover:text-foreground'}`
+            }
+          >
             Settings
           </NavLink>
-          <NavLink to="/account" className="text-sm text-slate-400 hover:text-white transition-colors">
+          <NavLink
+            to="/account"
+            className={({ isActive }) =>
+              `text-body-sm font-medium transition-colors ${isActive ? 'text-accent' : 'text-muted hover:text-foreground'}`
+            }
+          >
             Account
           </NavLink>
         </div>
         <div className="flex items-center gap-4">
           <button
             onClick={handleLock}
-            className="text-sm text-slate-400 hover:text-white transition-colors"
+            className="text-body-sm font-medium text-muted hover:text-danger transition-colors"
           >
             Lock Vault
           </button>

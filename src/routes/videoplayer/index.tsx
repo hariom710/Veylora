@@ -13,9 +13,9 @@ export default function VideoPlayer({ token, onLock }: VideoPlayerProps) {
   const { fileId = '' } = useParams();
   const src = token && fileId ? vaultUrl(fileId, token) : undefined;
   return (
-    <div className="min-h-screen bg-slate-950 p-8">
+    <div className="min-h-screen bg-background p-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-white">Video Player</h1>
+        <h1 className="text-title-1">Video Player</h1>
         <Button onClick={onLock} variant="destructive">Lock Vault</Button>
       </div>
 
@@ -25,7 +25,7 @@ export default function VideoPlayer({ token, onLock }: VideoPlayerProps) {
             {src ? (
               <video className="w-full h-full" controls src={src} />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-slate-400">
+              <div className="w-full h-full flex items-center justify-center text-muted">
                 No file selected
               </div>
             )}
