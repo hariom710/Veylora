@@ -324,9 +324,9 @@ Status: fixes applied (frontend assets + dialog plugin); smoke test in progress
   import path (dialog → streaming encrypt → DB row); no separate bulk/folder
   import exists.
 - Skipped for v1.1 (by agreement, not regressions): light theme, per-folder
-  storage breakdown, "Move vault", right-click context menus, move-to-folder,
-  Settings recovery-key re-display (impossible by design), Windows session-lock
-  polling, Windows Hello, auto-update, browser E2E.
+  storage breakdown, "Move vault", Settings recovery-key re-display (impossible by design), Windows session-lock
+  polling, Windows Hello, auto-update, browser E2E. (Shipped in this pass:
+  right-click context menus, move-to-folder + folder rename, batch select.)
 - Frozen surfaces untouched: crypto/*, storage/format/*, storage/blob.rs,
   storage/crash.rs, streaming/*, auth/session.rs, backup/*. Format v1 unchanged;
   8 frozen HKDF labels unchanged (only subkey infos "manifest-nonce"/"trailer-nonce"

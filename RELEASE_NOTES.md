@@ -2,7 +2,7 @@
 
 ## Release Date
 
-2026-11-11
+2026-11-12
 
 ## What is Veylora?
 
@@ -35,7 +35,7 @@ initiates an export of a file to a location of their choice.
 2. Verify the SHA-256 hash matches the value published below:
 
    ```
-   SHA-256: 353ed801ab8c972864c3f73ad1f6c69617bac71ce703d3507c526f13c0014f8d
+   SHA-256: 30d551af20c0d2e3bf41ee36a1cc904886cdef64039b6aa237929d783a12e9ac
    ```
 
    Verify with:
