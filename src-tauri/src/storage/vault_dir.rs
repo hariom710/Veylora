@@ -76,20 +76,16 @@ pub fn fsync_dir(path: &Path) -> io::Result<()> {
         const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x02000000;
         const ERROR_ACCESS_DENIED: u32 = 5;
 
-        let dir = match std::fs::OpenOptions::new()
+        let dir = std::fs::OpenOptions::new()
             .read(true)
             .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
-            .open(path)
-        {
-            Ok(d) => d,
-            Err(e) => return Err(e),
-        };
+            .open(path)?;
 
         extern "system" {
             fn FlushFileBuffers(h: *mut std::ffi::c_void) -> std::ffi::c_int;
         }
 
-        let result = unsafe { FlushFileBuffers(dir.as_raw_handle() as *mut std::ffi::c_void) };
+        let result = unsafe { FlushFileBuffers(dir.as_raw_handle()) };
         if result == 0 {
             let last_error = std::io::Error::last_os_error();
             if last_error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32) {
@@ -125,9 +121,10 @@ mod tests {
 
     #[test]
     fn create_layout_makes_dirs() {
-        let tmp = std::env::current_dir()
-            .unwrap()
-            .join(format!("target/debug/test-vault-vdir-{}", std::process::id()));
+        let tmp = std::env::current_dir().unwrap().join(format!(
+            "target/debug/test-vault-vdir-{}",
+            std::process::id()
+        ));
         let _ = fs::remove_dir_all(&tmp);
         let vdir = VaultDir::new(tmp.clone());
         vdir.create_layout().expect("create layout");
@@ -139,16 +136,23 @@ mod tests {
     #[test]
     fn blob_path_uses_hex_file_id() {
         let vdir = VaultDir::new(PathBuf::from("/tmp/vault"));
-        let file_id = [0xAB, 0xCD, 0xEF, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D];
+        let file_id = [
+            0xAB, 0xCD, 0xEF, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B,
+            0x0C, 0x0D,
+        ];
         let path = vdir.blob_path(&file_id);
-        assert_eq!(path.file_name().unwrap(), "abcdef0102030405060708090a0b0c0d");
+        assert_eq!(
+            path.file_name().unwrap(),
+            "abcdef0102030405060708090a0b0c0d"
+        );
     }
 
     #[test]
     fn fsync_dir_works_on_existing_dir() {
-        let tmp = std::env::current_dir()
-            .unwrap()
-            .join(format!("target/debug/test-vault-fsync-{}", std::process::id()));
+        let tmp = std::env::current_dir().unwrap().join(format!(
+            "target/debug/test-vault-fsync-{}",
+            std::process::id()
+        ));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
         fsync_dir(&tmp).expect("fsync dir should succeed");
@@ -159,17 +163,15 @@ mod tests {
     fn tmp_blob_path_uses_veylora_prefix() {
         let vdir = VaultDir::new(PathBuf::from("/tmp/vault"));
         let path = vdir.tmp_blob_path("abc123");
-        assert_eq!(
-            path.file_name().unwrap(),
-            ".veylora-tmp-abc123"
-        );
+        assert_eq!(path.file_name().unwrap(), ".veylora-tmp-abc123");
     }
 
     #[test]
     fn fsync_dir_ok_on_normal_directory() {
-        let tmp = std::env::current_dir()
-            .unwrap()
-            .join(format!("target/debug/test-vault-fsync2-{}", std::process::id()));
+        let tmp = std::env::current_dir().unwrap().join(format!(
+            "target/debug/test-vault-fsync2-{}",
+            std::process::id()
+        ));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
         // fsync_dir on a normal directory must return Ok(()) on Windows

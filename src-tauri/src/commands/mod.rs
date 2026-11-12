@@ -7,16 +7,16 @@
 
 #![allow(missing_docs)]
 
-use std::sync::Arc;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use crate::auth::session::SessionManager;
 use crate::auth::UnlockMethod;
 use crate::database::Db;
 use crate::storage::vault_dir::VaultDir;
 use crate::vault::VaultMeta;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
-pub mod files;  // Slice B: file/folder IPC commands (import, list, export, ...)
+pub mod files; // Slice B: file/folder IPC commands (import, list, export, ...)
 
 /// Information returned on vault create/open.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -95,17 +95,21 @@ pub fn vault_create(
     crate::storage::vault_dir::fsync_dir(&vdir.blobs_dir).map_err(|e| e.to_string())?;
 
     // Create vault.db and apply migrations
-    let db = crate::database::Db::open(&vdir.db_path)
-        .map_err(|e| e.to_string())?;
+    let db = crate::database::Db::open(&vdir.db_path).map_err(|e| e.to_string())?;
 
     // Insert vault record
-    db.conn().execute(
-        "INSERT INTO vaults (id, created_at) VALUES (?1, ?2)",
-        rusqlite::params![1, std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64],
-    ).map_err(|e| e.to_string())?;
+    db.conn()
+        .execute(
+            "INSERT INTO vaults (id, created_at) VALUES (?1, ?2)",
+            rusqlite::params![
+                1,
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64
+            ],
+        )
+        .map_err(|e| e.to_string())?;
 
     let vault_id = vault_id_from_meta(&meta);
     session.set_session(
@@ -123,17 +127,13 @@ pub fn vault_create(
 
 /// Open an existing vault (read metadata only, set current path).
 #[allow(dead_code)]
-pub fn vault_open(
-    path: String,
-    session: Arc<SessionManager>,
-) -> Result<VaultInfo, String> {
+pub fn vault_open(path: String, session: Arc<SessionManager>) -> Result<VaultInfo, String> {
     let vdir = VaultDir::new(std::path::Path::new(&path).to_path_buf());
     let meta_path = &vdir.meta_path;
 
-    let meta_str = std::fs::read_to_string(meta_path)
-        .map_err(|_| "vault not found".to_string())?;
-    let meta: VaultMeta = serde_json::from_str(&meta_str)
-        .map_err(|_| "vault corrupted".to_string())?;
+    let meta_str = std::fs::read_to_string(meta_path).map_err(|_| "vault not found".to_string())?;
+    let meta: VaultMeta =
+        serde_json::from_str(&meta_str).map_err(|_| "vault corrupted".to_string())?;
 
     let vault_id = vault_id_from_meta(&meta);
 
@@ -150,15 +150,13 @@ pub fn vault_open(
 
 /// Unlock with PIN.
 #[allow(dead_code)]
-pub fn vault_unlock_pin(
-    pin: String,
-    session: Arc<SessionManager>,
-) -> Result<UnlockResult, String> {
-    let path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
+pub fn vault_unlock_pin(pin: String, session: Arc<SessionManager>) -> Result<UnlockResult, String> {
+    let path = session
+        .current_path()
+        .ok_or_else(|| "no vault open".to_string())?;
 
-    let db = crate::database::Db::open(
-        &std::path::Path::new(&path).join("vault.db"),
-    ).map_err(|e| e.to_string())?;
+    let db = crate::database::Db::open(&std::path::Path::new(&path).join("vault.db"))
+        .map_err(|e| e.to_string())?;
 
     let vault_id = vault_id_at(&path)?;
 
@@ -191,10 +189,11 @@ pub fn vault_unlock_password(
     password: String,
     session: Arc<SessionManager>,
 ) -> Result<UnlockResult, String> {
-    let path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
-    let db = crate::database::Db::open(
-        &std::path::Path::new(&path).join("vault.db"),
-    ).map_err(|e| e.to_string())?;
+    let path = session
+        .current_path()
+        .ok_or_else(|| "no vault open".to_string())?;
+    let db = crate::database::Db::open(&std::path::Path::new(&path).join("vault.db"))
+        .map_err(|e| e.to_string())?;
 
     let vault_id = vault_id_at(&path)?;
 
@@ -203,7 +202,10 @@ pub fn vault_unlock_password(
         return Err(format!("locked out: try again in {}s", remaining));
     }
 
-    match crate::auth::password::unlock_with_password(std::path::Path::new(&path), password.as_bytes()) {
+    match crate::auth::password::unlock_with_password(
+        std::path::Path::new(&path),
+        password.as_bytes(),
+    ) {
         Ok(new_session) => {
             crate::auth::throttle::clear_attempts(&db, vault_id);
             session.set_session(new_session, path);
@@ -225,10 +227,11 @@ pub fn vault_unlock_recovery(
     recovery_key: String,
     session: Arc<SessionManager>,
 ) -> Result<UnlockResult, String> {
-    let path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
-    let db = crate::database::Db::open(
-        &std::path::Path::new(&path).join("vault.db"),
-    ).map_err(|e| e.to_string())?;
+    let path = session
+        .current_path()
+        .ok_or_else(|| "no vault open".to_string())?;
+    let db = crate::database::Db::open(&std::path::Path::new(&path).join("vault.db"))
+        .map_err(|e| e.to_string())?;
 
     let vault_id = vault_id_at(&path)?;
 
@@ -237,10 +240,11 @@ pub fn vault_unlock_recovery(
         return Err(format!("locked out: try again in {}s", remaining));
     }
 
-    let recovery_bytes = crate::crypto::recovery::decode_recovery_key(&recovery_key)
-        .map_err(|e| e.to_string())?;
+    let recovery_bytes =
+        crate::crypto::recovery::decode_recovery_key(&recovery_key).map_err(|e| e.to_string())?;
 
-    match crate::auth::recovery::unlock_with_recovery(std::path::Path::new(&path), &recovery_bytes) {
+    match crate::auth::recovery::unlock_with_recovery(std::path::Path::new(&path), &recovery_bytes)
+    {
         Ok(new_session) => {
             crate::auth::throttle::clear_attempts(&db, vault_id);
             session.set_session(new_session, path);
@@ -258,18 +262,14 @@ pub fn vault_unlock_recovery(
 
 /// Lock the vault: zeroize MVK, drop session.
 #[allow(dead_code)]
-pub fn vault_lock(
-    session: Arc<SessionManager>,
-) -> Result<(), String> {
+pub fn vault_lock(session: Arc<SessionManager>) -> Result<(), String> {
     session.lock();
     Ok(())
 }
 
 /// Vault status: locked/unlocked, vault_id, file_count, storage_used.
 #[allow(dead_code)]
-pub fn vault_status(
-    session: Arc<SessionManager>,
-) -> Result<StatusInfo, String> {
+pub fn vault_status(session: Arc<SessionManager>) -> Result<StatusInfo, String> {
     let locked = session.is_locked();
     let vault_id = session.vault_id();
 
@@ -292,16 +292,13 @@ pub fn vault_status(
 
 /// Public vault metadata (no keys).
 #[allow(dead_code)]
-pub fn vault_get_meta(
-    path: String,
-) -> Result<VaultPublicMeta, String> {
+pub fn vault_get_meta(path: String) -> Result<VaultPublicMeta, String> {
     let vdir = VaultDir::new(std::path::Path::new(&path).to_path_buf());
     let meta_path = &vdir.meta_path;
 
-    let meta_str = std::fs::read_to_string(meta_path)
-        .map_err(|_| "vault not found".to_string())?;
-    let meta: VaultMeta = serde_json::from_str(&meta_str)
-        .map_err(|_| "vault corrupted".to_string())?;
+    let meta_str = std::fs::read_to_string(meta_path).map_err(|_| "vault not found".to_string())?;
+    let meta: VaultMeta =
+        serde_json::from_str(&meta_str).map_err(|_| "vault corrupted".to_string())?;
 
     let kdf_params = serde_json::to_string(&meta.pin.as_ref().map(|e| &e.params))
         .unwrap_or_else(|_| "null".to_string());
@@ -363,10 +360,10 @@ pub fn vault_get_session_token(
 /// no session to ask (lock() drops it), only the open path remains.
 pub(crate) fn vault_id_at(path: &str) -> Result<u64, String> {
     let vdir = VaultDir::new(std::path::Path::new(path).to_path_buf());
-    let meta_str = std::fs::read_to_string(&vdir.meta_path)
-        .map_err(|_| "vault not found".to_string())?;
-    let meta: VaultMeta = serde_json::from_str(&meta_str)
-        .map_err(|_| "vault corrupted".to_string())?;
+    let meta_str =
+        std::fs::read_to_string(&vdir.meta_path).map_err(|_| "vault not found".to_string())?;
+    let meta: VaultMeta =
+        serde_json::from_str(&meta_str).map_err(|_| "vault corrupted".to_string())?;
     Ok(vault_id_from_meta(&meta))
 }
 
@@ -408,7 +405,9 @@ pub struct BackupHistoryEntry {
 
 /// Open the DB for the vault at `session.current_path()`.
 pub(crate) fn open_db_for_session(session: &SessionManager) -> Result<Db, String> {
-    let path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
+    let path = session
+        .current_path()
+        .ok_or_else(|| "no vault open".to_string())?;
     crate::database::Db::open(&std::path::Path::new(&path).join("vault.db"))
         .map_err(|e| e.to_string())
 }
@@ -418,7 +417,9 @@ pub(crate) fn with_mvk<F, R>(session: &SessionManager, f: F) -> Result<R, String
 where
     F: FnOnce(&[u8; 32]) -> R,
 {
-    session.with_mvk(f).map_err(|_| "vault is locked".to_string())
+    session
+        .with_mvk(f)
+        .map_err(|_| "vault is locked".to_string())
 }
 
 /// Create a backup of the current vault at `dest_path`.
@@ -431,12 +432,16 @@ pub fn vault_backup_create(
     }
 
     let db = open_db_for_session(&session)?;
-    let vdir_path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
-    let vdir = crate::storage::vault_dir::VaultDir::new(std::path::Path::new(&vdir_path).to_path_buf());
+    let vdir_path = session
+        .current_path()
+        .ok_or_else(|| "no vault open".to_string())?;
+    let vdir =
+        crate::storage::vault_dir::VaultDir::new(std::path::Path::new(&vdir_path).to_path_buf());
 
     let inner_result = with_mvk(&session, |mvk| {
         crate::backup::create::create_backup(mvk, &db, &vdir, &dest_path)
-    }).map_err(|e| e.to_string())?;
+    })
+    .map_err(|e| e.to_string())?;
 
     let bi = inner_result.map_err(|e| e.to_string())?;
 
@@ -505,12 +510,16 @@ pub fn vault_backup_restore(
     }
 
     let mut db = open_db_for_session(&session)?;
-    let vdir_path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
-    let vdir = crate::storage::vault_dir::VaultDir::new(std::path::Path::new(&vdir_path).to_path_buf());
+    let vdir_path = session
+        .current_path()
+        .ok_or_else(|| "no vault open".to_string())?;
+    let vdir =
+        crate::storage::vault_dir::VaultDir::new(std::path::Path::new(&vdir_path).to_path_buf());
 
     let inner_result = with_mvk(&session, |mvk| {
         crate::backup::restore::restore_backup(mvk, &mut db, &vdir, &backup_path)
-    }).map_err(|e| e.to_string())?;
+    })
+    .map_err(|e| e.to_string())?;
 
     let ri = inner_result.map_err(|e| e.to_string())?;
 
@@ -525,8 +534,7 @@ pub fn vault_backup_history(
     session: Arc<SessionManager>,
 ) -> Result<Vec<BackupHistoryEntry>, String> {
     let db = open_db_for_session(&session)?;
-    let entries = crate::backup::verify::list_backup_history(&db)
-        .map_err(|e| e.to_string())?;
+    let entries = crate::backup::verify::list_backup_history(&db).map_err(|e| e.to_string())?;
     Ok(entries
         .into_iter()
         .map(|e| BackupHistoryEntry {
@@ -563,8 +571,8 @@ fn valid_pin(pin: &str) -> bool {
 
 fn read_meta(path: &str) -> Result<(VaultMeta, VaultDir, std::path::PathBuf), String> {
     let vdir = VaultDir::new(std::path::Path::new(path).to_path_buf());
-    let meta_str = std::fs::read_to_string(&vdir.meta_path)
-        .map_err(|_| "vault not found".to_string())?;
+    let meta_str =
+        std::fs::read_to_string(&vdir.meta_path).map_err(|_| "vault not found".to_string())?;
     let meta: VaultMeta =
         serde_json::from_str(&meta_str).map_err(|_| "vault corrupted".to_string())?;
     let root = std::path::PathBuf::from(path);
@@ -590,7 +598,9 @@ pub fn vault_change_pin(
     if session.is_locked() {
         return Err("vault is locked".to_string());
     }
-    let path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
+    let path = session
+        .current_path()
+        .ok_or_else(|| "no vault open".to_string())?;
     if !valid_pin(&new_pin) {
         return Err("PIN must be 4-6 digits".to_string());
     }
@@ -617,7 +627,9 @@ pub fn vault_change_password(
     if session.is_locked() {
         return Err("vault is locked".to_string());
     }
-    let path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
+    let path = session
+        .current_path()
+        .ok_or_else(|| "no vault open".to_string())?;
     if new_password.len() < 8 {
         return Err("Password must be at least 8 characters".to_string());
     }
@@ -653,7 +665,9 @@ pub fn vault_delete(pin: String, session: Arc<SessionManager>) -> Result<(), Str
     if session.is_locked() {
         return Err("vault is locked".to_string());
     }
-    let path = session.current_path().ok_or_else(|| "no vault open".to_string())?;
+    let path = session
+        .current_path()
+        .ok_or_else(|| "no vault open".to_string())?;
 
     // 1. Verify the credential before touching any data.
     crate::auth::pin::unlock_with_pin(std::path::Path::new(&path), pin.as_bytes())
@@ -667,4 +681,3 @@ pub fn vault_delete(pin: String, session: Arc<SessionManager>) -> Result<(), Str
     std::fs::remove_dir_all(&path).map_err(|e| format!("Failed to delete vault: {e}"))?;
     Ok(())
 }
-

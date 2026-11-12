@@ -3,7 +3,7 @@
 //! configurable auto-lock timeout — through the same command layer the IPC
 //! handlers call.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use veylora::auth::session::SessionManager;
@@ -20,7 +20,7 @@ fn tmp_dir(tag: &str) -> PathBuf {
     dir
 }
 
-fn create_vault(root: &PathBuf, session: &Arc<SessionManager>) -> commands::VaultInfo {
+fn create_vault(root: &Path, session: &Arc<SessionManager>) -> commands::VaultInfo {
     let vault_path = root.join("vault");
     commands::vault_create(
         "test".to_string(),
@@ -32,7 +32,7 @@ fn create_vault(root: &PathBuf, session: &Arc<SessionManager>) -> commands::Vaul
     .expect("vault_create should succeed")
 }
 
-fn import_file(root: &PathBuf, name: &str, session: &Arc<SessionManager>) -> u64 {
+fn import_file(root: &Path, name: &str, session: &Arc<SessionManager>) -> u64 {
     let src = root.join(name);
     std::fs::write(&src, format!("content of {name}")).unwrap();
     let imported = files::file_import(
@@ -104,19 +104,14 @@ fn slicec_change_pin_verifies_current_then_rotates() {
     create_vault(&root, &session);
 
     // Wrong current PIN must be rejected before anything is written.
-    assert!(commands::vault_change_pin(
-        "9999".to_string(),
-        "5678".to_string(),
-        session.clone()
-    )
-    .is_err());
+    assert!(
+        commands::vault_change_pin("9999".to_string(), "5678".to_string(), session.clone())
+            .is_err()
+    );
     // Invalid new PIN format rejected.
-    assert!(commands::vault_change_pin(
-        "1234".to_string(),
-        "12".to_string(),
-        session.clone()
-    )
-    .is_err());
+    assert!(
+        commands::vault_change_pin("1234".to_string(), "12".to_string(), session.clone()).is_err()
+    );
 
     commands::vault_change_pin("1234".to_string(), "5678".to_string(), session.clone())
         .expect("PIN change should succeed");

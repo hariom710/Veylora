@@ -6,8 +6,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::crypto::hkdf::{LABEL_RECOVERY_WRAP, derive_subkey};
-use crate::crypto::kdf::{derive_password_kek, derive_pin_kek, PASSWORD_MEM_KIB, PIN_MEM_KIB, SALT_LEN};
+use crate::crypto::hkdf::{derive_subkey, LABEL_RECOVERY_WRAP};
+use crate::crypto::kdf::{
+    derive_password_kek, derive_pin_kek, PASSWORD_MEM_KIB, PIN_MEM_KIB, SALT_LEN,
+};
 use crate::crypto::wrap::{unwrap_mvk, wrap_mvk, WrappedPayload};
 use crate::crypto::{CryptoError, Mvk, Result, SecretKey};
 
@@ -59,7 +61,11 @@ fn entry_aad(kdf: &KdfType, params: &KdfParams, salt: &[u8]) -> Vec<u8> {
         KdfType::RecoveryHkdf => 2,
     });
     match params {
-        KdfParams::Argon2id { mem_kib, time, lanes } => {
+        KdfParams::Argon2id {
+            mem_kib,
+            time,
+            lanes,
+        } => {
             aad.extend_from_slice(&mem_kib.to_le_bytes());
             aad.extend_from_slice(&time.to_le_bytes());
             aad.extend_from_slice(&lanes.to_le_bytes());
@@ -85,7 +91,15 @@ impl VaultMeta {
     pub fn add_pin_entry(&mut self, pin: &[u8], mvk: &Mvk) -> Result<()> {
         let salt = random_salt();
         let kek = derive_pin_kek(pin, &salt)?;
-        let aad = entry_aad(&KdfType::Argon2idPin, &KdfParams::Argon2id { mem_kib: PIN_MEM_KIB, time: 3, lanes: 1 }, &salt);
+        let aad = entry_aad(
+            &KdfType::Argon2idPin,
+            &KdfParams::Argon2id {
+                mem_kib: PIN_MEM_KIB,
+                time: 3,
+                lanes: 1,
+            },
+            &salt,
+        );
         let payload = wrap_mvk(&kek, mvk, &aad)?;
         self.pin = Some(WrappedEntry {
             kdf: KdfType::Argon2idPin,
@@ -104,7 +118,15 @@ impl VaultMeta {
     pub fn add_password_entry(&mut self, password: &[u8], mvk: &Mvk) -> Result<()> {
         let salt = random_salt();
         let kek = derive_password_kek(password, &salt)?;
-        let aad = entry_aad(&KdfType::Argon2idPassword, &KdfParams::Argon2id { mem_kib: PASSWORD_MEM_KIB, time: 3, lanes: 1 }, &salt);
+        let aad = entry_aad(
+            &KdfType::Argon2idPassword,
+            &KdfParams::Argon2id {
+                mem_kib: PASSWORD_MEM_KIB,
+                time: 3,
+                lanes: 1,
+            },
+            &salt,
+        );
         let payload = wrap_mvk(&kek, mvk, &aad)?;
         self.password = Some(WrappedEntry {
             kdf: KdfType::Argon2idPassword,
@@ -187,5 +209,11 @@ impl VaultMeta {
             return Err(CryptoError::UnsupportedVersion);
         }
         Ok(meta)
+    }
+}
+
+impl Default for VaultMeta {
+    fn default() -> Self {
+        Self::new()
     }
 }

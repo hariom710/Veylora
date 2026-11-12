@@ -11,7 +11,7 @@ use crate::crypto::hkdf::{derive_subkey, LABEL_METADATA_KEY};
 use crate::crypto::mvk::Mvk;
 use crate::database::files::FileRecord;
 use crate::database::folders::FolderRecord;
-use crate::storage::format::{FileKey, read_header, read_range};
+use crate::storage::format::{read_header, read_range, FileKey};
 
 /// File row for the UI (decrypted metadata — UI strings by design).
 #[derive(Debug, Clone, serde::Serialize)]
@@ -115,13 +115,9 @@ pub fn file_import(
 
         // Blob BEFORE DB row: a crash leaves a cleanable orphan blob, never
         // a DB row pointing at a missing blob. write_blob is atomic (temp+rename).
-        let encrypted_size = crate::storage::blob::write_blob(
-            &vault_root,
-            &file_id,
-            &mut source,
-            &file_key,
-        )
-        .map_err(|e| e.to_string())?;
+        let encrypted_size =
+            crate::storage::blob::write_blob(&vault_root, &file_id, &mut source, &file_key)
+                .map_err(|e| e.to_string())?;
 
         let id = crate::database::files::insert_file(
             &db,
@@ -142,10 +138,7 @@ pub fn file_import(
 }
 
 /// List files and subfolders of one directory (None = vault root).
-pub fn file_list(
-    folder_id: Option<u64>,
-    session: Arc<SessionManager>,
-) -> Result<Listing, String> {
+pub fn file_list(folder_id: Option<u64>, session: Arc<SessionManager>) -> Result<Listing, String> {
     require_unlocked(&session)?;
     let db = super::open_db_for_session(&session)?;
     let metadata_key = metadata_key(&session)?;
@@ -181,17 +174,16 @@ pub fn file_export(
 
     // Key material stays inside the closure (zeroized on drop with FileKey).
     let written = super::with_mvk(&session, |mvk| -> Result<u64, String> {
-        let file_key = FileKey::derive(&Mvk::from_array(*mvk), &file_id)
-            .map_err(|e| e.to_string())?;
+        let file_key =
+            FileKey::derive(&Mvk::from_array(*mvk), &file_id).map_err(|e| e.to_string())?;
         let vdir = crate::storage::vault_dir::VaultDir::new(vault_root.clone());
         let blob_path = vdir.blob_path(&file_id);
         let data = std::fs::read(&blob_path).map_err(|e| format!("cannot read blob: {e}"))?;
-        let (header, _) = read_header(&data, &file_key)
-            .map_err(|e| format!("corrupted blob: {e}"))?;
+        let (header, _) =
+            read_header(&data, &file_key).map_err(|e| format!("corrupted blob: {e}"))?;
         let plain = read_range(&data, 0, header.total_length, &file_key)
             .map_err(|e| format!("decryption failed: {e}"))?;
-        std::fs::write(&dest_path, &plain)
-            .map_err(|e| format!("cannot write {dest_path}: {e}"))?;
+        std::fs::write(&dest_path, &plain).map_err(|e| format!("cannot write {dest_path}: {e}"))?;
         Ok(plain.len() as u64)
     })??;
     Ok(written)
@@ -201,10 +193,7 @@ pub fn file_export(
 /// what the image/PDF/video viewers load. Bytes go straight into the HTTP
 /// response in memory; nothing is written to disk (unlike file_export).
 /// Same recipe as file_export: lock gate → token → row → FileKey → read_range.
-pub fn file_preview(
-    url: String,
-    session: Arc<SessionManager>,
-) -> Result<Vec<u8>, String> {
+pub fn file_preview(url: String, session: Arc<SessionManager>) -> Result<Vec<u8>, String> {
     // vault://file/<32-hex>?token=<hex>&range=<start>-<end>. The range is
     // optional; end is inclusive and clamped to the file (mirrors the URL
     // contract in streaming/url.rs, but accepts the 32-hex ids that
@@ -229,13 +218,14 @@ pub fn file_preview(
                 let (start, end) = value
                     .split_once('-')
                     .ok_or_else(|| "invalid range".to_string())?;
-                let start: u64 = start
-                    .parse()
-                    .map_err(|_| "invalid range".to_string())?;
+                let start: u64 = start.parse().map_err(|_| "invalid range".to_string())?;
                 let end = if end.is_empty() {
                     None
                 } else {
-                    Some(end.parse::<u64>().map_err(|_| "invalid range".to_string())?)
+                    Some(
+                        end.parse::<u64>()
+                            .map_err(|_| "invalid range".to_string())?,
+                    )
                 };
                 range = Some((start, end));
             }
@@ -260,13 +250,13 @@ pub fn file_preview(
 
     // Key material stays inside the closure (zeroized on drop with FileKey).
     let bytes = super::with_mvk(&session, |mvk| -> Result<Vec<u8>, String> {
-        let file_key = FileKey::derive(&Mvk::from_array(*mvk), &file_id)
-            .map_err(|e| e.to_string())?;
+        let file_key =
+            FileKey::derive(&Mvk::from_array(*mvk), &file_id).map_err(|e| e.to_string())?;
         let vdir = crate::storage::vault_dir::VaultDir::new(vault_root.clone());
         let blob_path = vdir.blob_path(&file_id);
         let data = std::fs::read(&blob_path).map_err(|e| format!("cannot read blob: {e}"))?;
-        let (header, _) = read_header(&data, &file_key)
-            .map_err(|e| format!("corrupted blob: {e}"))?;
+        let (header, _) =
+            read_header(&data, &file_key).map_err(|e| format!("corrupted blob: {e}"))?;
         let total = header.total_length;
         if total == 0 {
             return Ok(Vec::new());
@@ -387,11 +377,7 @@ pub fn folder_rename(
 }
 
 /// Star or unstar a file.
-pub fn file_favorite(
-    id: u64,
-    favorite: bool,
-    session: Arc<SessionManager>,
-) -> Result<(), String> {
+pub fn file_favorite(id: u64, favorite: bool, session: Arc<SessionManager>) -> Result<(), String> {
     let vault_root = require_unlocked(&session)?;
     let vault_id = super::vault_id_at(&vault_root)?;
     let db = super::open_db_for_session(&session)?;
@@ -411,16 +397,12 @@ pub fn file_favorites(session: Arc<SessionManager>) -> Result<Vec<FileInfo>, Str
     let metadata_key = metadata_key(&session)?;
 
     let mut out = Vec::new();
-    for file_id in crate::database::favorites::list_favorite_ids(&db, vault_id)
-        .map_err(|e| e.to_string())?
+    for file_id in
+        crate::database::favorites::list_favorite_ids(&db, vault_id).map_err(|e| e.to_string())?
     {
         // A favorite whose file was deleted is skipped, not fatal.
-        if let Ok(row_id) =
-            crate::database::files::get_file_id_by_file_id(&db, &file_id)
-        {
-            if let Ok(record) =
-                crate::database::files::get_file(&db, &metadata_key, row_id)
-            {
+        if let Ok(row_id) = crate::database::files::get_file_id_by_file_id(&db, &file_id) {
+            if let Ok(record) = crate::database::files::get_file(&db, &metadata_key, row_id) {
                 out.push(to_file_info(record));
             }
         }

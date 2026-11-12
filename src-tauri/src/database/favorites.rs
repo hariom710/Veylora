@@ -44,7 +44,9 @@ pub fn list_favorite_ids(db: &Db, vault_id: u64) -> Result<Vec<String>, DbError>
         .prepare("SELECT file_id FROM favorites WHERE vault_id = ?1 ORDER BY id DESC")
         .map_err(DbError::from)?;
     let rows = stmt
-        .query_map(rusqlite::params![vault_id as i64], |r| r.get::<_, String>(0))
+        .query_map(rusqlite::params![vault_id as i64], |r| {
+            r.get::<_, String>(0)
+        })
         .map_err(DbError::from)?;
     rows.collect::<Result<Vec<_>, _>>().map_err(DbError::from)
 }

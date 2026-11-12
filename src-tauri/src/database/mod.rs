@@ -80,9 +80,11 @@ mod tests {
     fn open_db_creates_tables() {
         static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let id = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let tmp = std::env::current_dir()
-            .unwrap()
-            .join(format!("target/debug/test-vault-db-{}-{}", std::process::id(), id));
+        let tmp = std::env::current_dir().unwrap().join(format!(
+            "target/debug/test-vault-db-{}-{}",
+            std::process::id(),
+            id
+        ));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
 
@@ -93,7 +95,9 @@ mod tests {
         // Verify all 6 tables exist
         let tables: Vec<String> = db
             .conn
-            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+            )
             .unwrap()
             .query_map([], |row| row.get::<_, String>(0))
             .unwrap()
@@ -101,8 +105,12 @@ mod tests {
             .collect();
 
         for expected in [
-            "vaults", "folders", "encrypted_files", "favorites",
-            "application_settings", "backup_history",
+            "vaults",
+            "folders",
+            "encrypted_files",
+            "favorites",
+            "application_settings",
+            "backup_history",
         ] {
             assert!(
                 tables.contains(&expected.to_string()),
@@ -118,9 +126,11 @@ mod tests {
     fn open_db_wal_mode() {
         static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let id = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let tmp = std::env::current_dir()
-            .unwrap()
-            .join(format!("target/debug/test-vault-wal-{}-{}", std::process::id(), id));
+        let tmp = std::env::current_dir().unwrap().join(format!(
+            "target/debug/test-vault-wal-{}-{}",
+            std::process::id(),
+            id
+        ));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
 

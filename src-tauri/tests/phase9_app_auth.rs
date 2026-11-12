@@ -38,7 +38,10 @@ fn phase9_signup_login_logout_roundtrip() {
     assert!(status.logged_in);
     assert_eq!(status.email.as_deref(), Some("user@example.com"));
     assert_eq!(status.role.as_deref(), Some("user"));
-    assert!(!status.used_default_password, "regular user has no default flag");
+    assert!(
+        !status.used_default_password,
+        "regular user has no default flag"
+    );
 
     auth.logout();
     assert!(!auth.status().logged_in, "logout clears the session");
@@ -50,16 +53,11 @@ fn phase9_signup_login_logout_roundtrip() {
 fn phase9_login_error_identical_for_unknown_email_and_wrong_password() {
     let auth = AppAuth::with_db_path(tmp_db("uniform-error"));
 
-    let unknown = auth
-        .login("nobody@example.com", "whatever123")
-        .unwrap_err();
+    let unknown = auth.login("nobody@example.com", "whatever123").unwrap_err();
     let wrong = auth.login(ADMIN_EMAIL, "definitely-wrong").unwrap_err();
 
     assert_eq!(unknown, "Invalid email or password");
-    assert_eq!(
-        unknown, wrong,
-        "must not reveal whether the account exists"
-    );
+    assert_eq!(unknown, wrong, "must not reveal whether the account exists");
 
     let _ = std::fs::remove_dir_all(tmp_db("uniform-error").parent().unwrap());
 }
@@ -70,14 +68,10 @@ fn phase9_duplicate_email_rejected_case_insensitive() {
 
     auth.signup("dup@example.com", "longenough")
         .expect("first signup succeeds");
-    let err = auth
-        .signup("dup@example.com", "longenough")
-        .unwrap_err();
+    let err = auth.signup("dup@example.com", "longenough").unwrap_err();
     assert_eq!(err, "Email already in use");
 
-    let err_ci = auth
-        .signup("DUP@example.com", "longenough")
-        .unwrap_err();
+    let err_ci = auth.signup("DUP@example.com", "longenough").unwrap_err();
     assert_eq!(err_ci, "Email already in use", "UNIQUE is case-insensitive");
 
     let _ = std::fs::remove_dir_all(tmp_db("duplicate").parent().unwrap());
@@ -163,7 +157,8 @@ fn phase9_admin_delete_constraints() {
         .iter()
         .find(|u| u.email == "victim@example.com")
         .expect("victim row exists");
-    auth.delete_user(victim.id).expect("admin can delete a user");
+    auth.delete_user(victim.id)
+        .expect("admin can delete a user");
     let users = auth.list_users().expect("list after delete");
     assert!(!users.iter().any(|u| u.email == "victim@example.com"));
 
@@ -181,7 +176,8 @@ fn phase9_non_admin_cannot_administer() {
 
     assert_eq!(auth.list_users().unwrap_err(), "Admin only");
     assert_eq!(
-        auth.create_user("x@example.com", "longenough", "user").unwrap_err(),
+        auth.create_user("x@example.com", "longenough", "user")
+            .unwrap_err(),
         "Admin only"
     );
     assert_eq!(auth.delete_user(1).unwrap_err(), "Admin only");

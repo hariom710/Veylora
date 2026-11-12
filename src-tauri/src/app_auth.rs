@@ -274,7 +274,8 @@ impl AppAuth {
                 })
             })
             .map_err(|e| e.to_string())?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())
     }
 
     pub fn delete_user(&self, id: u64) -> Result<(), String> {
@@ -293,9 +294,11 @@ impl AppAuth {
         // must hold even for the admin's own row.
         if role == "admin" {
             let admins: i64 = conn
-                .query_row("SELECT COUNT(*) FROM app_users WHERE role = 'admin'", [], |r| {
-                    r.get(0)
-                })
+                .query_row(
+                    "SELECT COUNT(*) FROM app_users WHERE role = 'admin'",
+                    [],
+                    |r| r.get(0),
+                )
                 .map_err(|e| e.to_string())?;
             if admins <= 1 {
                 return Err("Cannot delete the last admin".to_string());
@@ -344,7 +347,11 @@ fn hash_password(password: &str) -> Result<String, String> {
     let mut salt = [0u8; 32];
     getrandom::getrandom(&mut salt).map_err(|e| e.to_string())?;
     let key = derive_password_kek(password.as_bytes(), &salt).map_err(|e| e.to_string())?;
-    Ok(format!("{}:{}", hex_encode(&salt), hex_encode(key.as_bytes())))
+    Ok(format!(
+        "{}:{}",
+        hex_encode(&salt),
+        hex_encode(key.as_bytes())
+    ))
 }
 
 fn verify_password(password: &str, stored: &str) -> bool {

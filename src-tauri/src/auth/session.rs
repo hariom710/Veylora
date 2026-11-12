@@ -1,27 +1,27 @@
 #![allow(missing_docs)]
 
-use crate::crypto::mvk::Mvk;
 use crate::auth::UnlockMethod;
+use crate::crypto::mvk::Mvk;
+use crate::streaming::token::TokenStore;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use zeroize::{Zeroize, ZeroizeOnDrop};
-use crate::streaming::token::TokenStore;
 
-/** 
- * Master Vault Key session: the MVK lives in a zeroizing buffer,
- * plus vault_id, unlock_method, last_activity, and a session token.
- * 
- * The token is a 32-byte random value that:
- *   - is issued at unlock time
- *   - rotates on every unlock
- *   - is invalidated on lock()
- *   - is validated via constant-time comparison
- *   - never crosses the IPC boundary (returned as hex String from
-     vault_get_session_token command)
- * 
- * SessionManager owns the TokenStore and the Option<Session>.
- * At most one session exists at a time.
- */
+/*
+* Master Vault Key session: the MVK lives in a zeroizing buffer,
+* plus vault_id, unlock_method, last_activity, and a session token.
+*
+* The token is a 32-byte random value that:
+*   - is issued at unlock time
+*   - rotates on every unlock
+*   - is invalidated on lock()
+*   - is validated via constant-time comparison
+*   - never crosses the IPC boundary (returned as hex String from
+    vault_get_session_token command)
+*
+* SessionManager owns the TokenStore and the Option<Session>.
+* At most one session exists at a time.
+*/
 
 /// Inner state of the session manager, including the token store.
 struct Inner {
@@ -73,7 +73,11 @@ impl std::fmt::Debug for Session {
 
 impl Default for Session {
     fn default() -> Self {
-        Self::new(Mvk::generate().expect("MVK generation failed"), 0, UnlockMethod::Pin)
+        Self::new(
+            Mvk::generate().expect("MVK generation failed"),
+            0,
+            UnlockMethod::Pin,
+        )
     }
 }
 
@@ -96,18 +100,32 @@ pub struct SessionManager {
 impl SessionManager {
     /// Create a new SessionManager with a new TokenStore.
     pub fn new_with_token() -> Self {
-        Self { inner: Mutex::new(Inner::new(TokenStore::new())) }
+        Self {
+            inner: Mutex::new(Inner::new(TokenStore::new())),
+        }
     }
 
     /// Create a new SessionManager (legacy constructor for Phase 4 compat).
     pub fn new() -> Self {
-        Self { inner: Mutex::new(Inner { session: None, current_path: None, token_store: TokenStore::new() }) }
+        Self {
+            inner: Mutex::new(Inner {
+                session: None,
+                current_path: None,
+                token_store: TokenStore::new(),
+            }),
+        }
     }
 
     /// Create a new SessionManager (legacy, no token — for Phase 4 compat).
     // Deprecated: use new_with_token() for Phase 5.
     pub fn legacy_new() -> Self {
-        Self { inner: Mutex::new(Inner { session: None, current_path: None, token_store: TokenStore::new() }) }
+        Self {
+            inner: Mutex::new(Inner {
+                session: None,
+                current_path: None,
+                token_store: TokenStore::new(),
+            }),
+        }
     }
 
     pub fn is_locked(&self) -> bool {
@@ -142,7 +160,12 @@ impl SessionManager {
 
     /// Get the vault_id of the active session, or None if locked.
     pub fn vault_id(&self) -> Option<u64> {
-        self.inner.lock().unwrap().session.as_ref().map(|s| s.vault_id)
+        self.inner
+            .lock()
+            .unwrap()
+            .session
+            .as_ref()
+            .map(|s| s.vault_id)
     }
 
     /// Update last_activity on the active session.
@@ -167,7 +190,12 @@ impl SessionManager {
     /// is String (hex), which does NOT match the forbidden identifier scan
     /// (Mvk/Kek/Key/Ciphertext/Nonce).
     pub fn token(&self) -> String {
-        self.inner.lock().unwrap().token_store.current().unwrap_or_default()
+        self.inner
+            .lock()
+            .unwrap()
+            .token_store
+            .current()
+            .unwrap_or_default()
     }
 
     /// Validate a token candidate using constant-time comparison.

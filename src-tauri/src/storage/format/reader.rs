@@ -5,19 +5,14 @@
 //! verify_file authenticates every chunk and the finalize record.
 
 use crate::storage::format::{
-    chunk, finalize, header, CHUNK_SIZE, NONCE_LEN, TAG_LEN, FormatError, FileKey, Result,
+    chunk, finalize, header, FileKey, FormatError, Result, CHUNK_SIZE, NONCE_LEN, TAG_LEN,
 };
 
 /// Read bytes [start, end) from an encrypted file on disk.
 ///
 /// `file` is the complete on-disk file contents. Returns only the requested
 /// plaintext bytes. Every chunk touched is authenticated; any failure aborts.
-pub fn read_range(
-    file: &[u8],
-    start: u64,
-    end: u64,
-    file_key: &FileKey,
-) -> Result<Vec<u8>> {
+pub fn read_range(file: &[u8], start: u64, end: u64, file_key: &FileKey) -> Result<Vec<u8>> {
     let (hdr, header_len) = header::read_header(file, file_key)?;
 
     if start > end {
@@ -60,7 +55,7 @@ pub fn read_range(
 
             // Copy the relevant slice from this chunk's plaintext.
             let chunk_start = i * CHUNK_SIZE;
-            let lo = if start > chunk_start { start - chunk_start } else { 0 };
+            let lo = start.saturating_sub(chunk_start);
             let hi = if end < chunk_start + pt_len as u64 {
                 (end - chunk_start) as usize
             } else {
@@ -140,7 +135,6 @@ pub fn round_trip_bytes(
     read_range(&encoded, 0, plaintext.len() as u64, file_key)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -157,10 +151,9 @@ mod tests {
     fn read_range_one_byte() {
         let (_mvk, file_key, file_id) = setup();
         let plaintext = vec![0x7fu8; 1];
-        let encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write");
+        let encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write");
         let out = read_range(&encoded, 0, 1, &file_key).expect("read");
         assert_eq!(out, plaintext);
     }
@@ -169,10 +162,9 @@ mod tests {
     fn read_range_exact_one_chunk() {
         let (_mvk, file_key, file_id) = setup();
         let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize).map(|i| (i % 256) as u8).collect();
-        let encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write");
+        let encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write");
         let out = read_range(&encoded, 0, CHUNK_SIZE, &file_key).expect("read");
         assert_eq!(out, plaintext);
     }
@@ -180,11 +172,12 @@ mod tests {
     #[test]
     fn read_range_one_chunk_plus_one_byte() {
         let (_mvk, file_key, file_id) = setup();
-        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize + 1).map(|i| (i % 256) as u8).collect();
-        let encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write");
+        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize + 1)
+            .map(|i| (i % 256) as u8)
+            .collect();
+        let encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write");
         let out = read_range(&encoded, 0, CHUNK_SIZE + 1, &file_key).expect("read");
         assert_eq!(out, plaintext);
     }
@@ -194,10 +187,9 @@ mod tests {
         let (_mvk, file_key, file_id) = setup();
         let size: usize = 10 * 1024 * 1024;
         let plaintext: Vec<u8> = (0..size).map(|i| (i % 256) as u8).collect();
-        let encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write");
+        let encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write");
 
         // Full read.
         let all = read_range(&encoded, 0, size as u64, &file_key).expect("read");
@@ -221,24 +213,26 @@ mod tests {
     fn read_range_spans_chunks() {
         let (_mvk, file_key, file_id) = setup();
         // range [65530, 65550) spans the end of chunk 0 and start of chunk 1.
-        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize * 2).map(|i| (i % 256) as u8).collect();
-        let encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write");
-        let out = read_range(&encoded, CHUNK_SIZE - 50, CHUNK_SIZE + 50, &file_key)
-            .expect("read");
-        assert_eq!(out, plaintext[(CHUNK_SIZE - 50) as usize..(CHUNK_SIZE + 50) as usize]);
+        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize * 2)
+            .map(|i| (i % 256) as u8)
+            .collect();
+        let encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write");
+        let out = read_range(&encoded, CHUNK_SIZE - 50, CHUNK_SIZE + 50, &file_key).expect("read");
+        assert_eq!(
+            out,
+            plaintext[(CHUNK_SIZE - 50) as usize..(CHUNK_SIZE + 50) as usize]
+        );
     }
 
     #[test]
     fn read_range_same_chunk() {
         let (_mvk, file_key, file_id) = setup();
         let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize).map(|i| (i % 256) as u8).collect();
-        let encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write");
+        let encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write");
         let out = read_range(&encoded, 100, 200, &file_key).expect("read");
         assert_eq!(out, plaintext[100..200]);
     }
@@ -247,10 +241,9 @@ mod tests {
     fn read_range_empty() {
         let (_mvk, file_key, file_id) = setup();
         let plaintext = vec![1u8; 100];
-        let encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write");
+        let encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write");
         let out = read_range(&encoded, 10, 10, &file_key).expect("read");
         assert!(out.is_empty());
     }
@@ -258,22 +251,24 @@ mod tests {
     #[test]
     fn verify_file_ok() {
         let (_mvk, file_key, file_id) = setup();
-        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize * 3 + 7).map(|i| (i % 256) as u8).collect();
-        let encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write");
+        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize * 3 + 7)
+            .map(|i| (i % 256) as u8)
+            .collect();
+        let encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write");
         verify_file(&encoded, &file_key).expect("verify");
     }
 
     #[test]
     fn negative_tampered_chunk_3() {
         let (_mvk, file_key, file_id) = setup();
-        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize * 4).map(|i| (i % 256) as u8).collect();
-        let mut encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write");
+        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize * 4)
+            .map(|i| (i % 256) as u8)
+            .collect();
+        let mut encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write");
         // Find chunk 3's ciphertext region and flip a byte.
         let (hdr, header_len) = header::read_header(&encoded, &file_key).expect("header");
         let mut offset = header_len;
@@ -287,13 +282,7 @@ mod tests {
             offset += chunk_on_disk_len;
         }
         // read_range across chunk 3 should fail.
-        let err = read_range(
-            &encoded,
-            3 * CHUNK_SIZE,
-            4 * CHUNK_SIZE,
-            &file_key,
-        )
-        .unwrap_err();
+        let err = read_range(&encoded, 3 * CHUNK_SIZE, 4 * CHUNK_SIZE, &file_key).unwrap_err();
         assert!(matches!(err, FormatError::ChunkAuth(3)));
         let err = verify_file(&encoded, &file_key).unwrap_err();
         assert!(matches!(err, FormatError::ChunkAuth(3)));
@@ -302,11 +291,12 @@ mod tests {
     #[test]
     fn negative_reorder_chunks() {
         let (_mvk, file_key, file_id) = setup();
-        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize * 3).map(|i| (i % 256) as u8).collect();
-        let encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write");
+        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize * 3)
+            .map(|i| (i % 256) as u8)
+            .collect();
+        let encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write");
 
         // Reorder: swap chunk 1 and chunk 2 on disk.
         let (hdr, header_len) = header::read_header(&encoded, &file_key).expect("header");
@@ -317,23 +307,28 @@ mod tests {
             let pt_len = chunk::chunk_plaintext_len(hdr.total_length, hdr.total_chunks, i);
             offset += NONCE_LEN + pt_len + TAG_LEN;
         }
-        let len1 = NONCE_LEN
-            + chunk::chunk_plaintext_len(hdr.total_length, hdr.total_chunks, 1)
-            + TAG_LEN;
-        let len2 = NONCE_LEN
-            + chunk::chunk_plaintext_len(hdr.total_length, hdr.total_chunks, 2)
-            + TAG_LEN;
+        let len1 =
+            NONCE_LEN + chunk::chunk_plaintext_len(hdr.total_length, hdr.total_chunks, 1) + TAG_LEN;
+        let len2 =
+            NONCE_LEN + chunk::chunk_plaintext_len(hdr.total_length, hdr.total_chunks, 2) + TAG_LEN;
         let mut reordered = encoded.clone();
-        reordered
-            .splice(offsets[1]..offsets[1] + len1, encoded[offsets[2]..offsets[2] + len2].iter().cloned());
+        reordered.splice(
+            offsets[1]..offsets[1] + len1,
+            encoded[offsets[2]..offsets[2] + len2].iter().cloned(),
+        );
         // Now splice chunk 2's original location with chunk 1's original bytes
         // (lengths are equal since all chunks are full).
-        reordered
-            .splice(offsets[2]..offsets[2] + len2, encoded[offsets[1]..offsets[1] + len1].iter().cloned());
+        reordered.splice(
+            offsets[2]..offsets[2] + len2,
+            encoded[offsets[1]..offsets[1] + len1].iter().cloned(),
+        );
 
         let err = verify_file(&reordered, &file_key).unwrap_err();
         assert!(
-            matches!(err, FormatError::RootHashMismatch | FormatError::ChunkAuth(_)),
+            matches!(
+                err,
+                FormatError::RootHashMismatch | FormatError::ChunkAuth(_)
+            ),
             "expected root hash or chunk auth error, got {:?}",
             err
         );
@@ -342,11 +337,12 @@ mod tests {
     #[test]
     fn negative_duplicate_chunk() {
         let (_mvk, file_key, file_id) = setup();
-        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize * 3).map(|i| (i % 256) as u8).collect();
-        let encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write");
+        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize * 3)
+            .map(|i| (i % 256) as u8)
+            .collect();
+        let encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write");
 
         // Duplicate chunk 1: insert it again after chunk 2.
         let (hdr, header_len) = header::read_header(&encoded, &file_key).expect("header");
@@ -363,10 +359,7 @@ mod tests {
         let chunk1_bytes = &encoded[offsets[1]..offsets[1] + lens[1]];
         let insert_at = offset; // after last chunk (where finalize starts)
         let mut duplicated = encoded.clone();
-        duplicated.splice(
-            insert_at..insert_at,
-            chunk1_bytes.iter().cloned(),
-        );
+        duplicated.splice(insert_at..insert_at, chunk1_bytes.iter().cloned());
 
         let err = verify_file(&duplicated, &file_key).unwrap_err();
         assert!(
@@ -384,15 +377,16 @@ mod tests {
     #[test]
     fn negative_truncate_last_100_bytes() {
         let (_mvk, file_key, file_id) = setup();
-        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize * 2 + 100).map(|i| (i % 256) as u8).collect();
-        let encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write");
+        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize * 2 + 100)
+            .map(|i| (i % 256) as u8)
+            .collect();
+        let encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write");
         let truncated = &encoded[..encoded.len() - 100];
 
         // Header and first chunks still read OK.
-        let _ = read_range(&truncated, 0, CHUNK_SIZE, &file_key).expect("read first chunk");
+        let _ = read_range(truncated, 0, CHUNK_SIZE, &file_key).expect("read first chunk");
         // verify_file should fail (finalize missing/corrupt).
         let err = verify_file(truncated, &file_key).unwrap_err();
         assert!(
@@ -405,11 +399,12 @@ mod tests {
     #[test]
     fn negative_truncate_middle_chunk() {
         let (_mvk, file_key, file_id) = setup();
-        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize * 3).map(|i| (i % 256) as u8).collect();
-        let encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write");
+        let plaintext: Vec<u8> = (0..CHUNK_SIZE as usize * 3)
+            .map(|i| (i % 256) as u8)
+            .collect();
+        let encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write");
 
         // Remove chunk 1 from the middle.
         let (hdr, header_len) = header::read_header(&encoded, &file_key).expect("header");
@@ -428,7 +423,12 @@ mod tests {
 
         let err = verify_file(&truncated, &file_key).unwrap_err();
         assert!(
-            matches!(err, FormatError::ChunkAuth(_) | FormatError::RootHashMismatch | FormatError::FinalizeAuth),
+            matches!(
+                err,
+                FormatError::ChunkAuth(_)
+                    | FormatError::RootHashMismatch
+                    | FormatError::FinalizeAuth
+            ),
             "expected auth/root/finalize error, got {:?}",
             err
         );
@@ -439,16 +439,18 @@ mod tests {
         let (_mvk, file_key, file_id_a) = setup();
         let file_id_b = [0x43u8; 16];
         let file_key_b = FileKey::derive(&_mvk, &file_id_b).expect("derive b");
-        let plaintext_a: Vec<u8> = (0..CHUNK_SIZE as usize * 2).map(|i| (i % 256) as u8).collect();
-        let plaintext_b: Vec<u8> = (0..CHUNK_SIZE as usize * 2).map(|i| ((i + 100) % 256) as u8).collect();
-        let encoded_a = crate::storage::format::writer::write_file_bytes(
-            &plaintext_a, &file_key, file_id_a,
-        )
-        .expect("write a");
-        let encoded_b = crate::storage::format::writer::write_file_bytes(
-            &plaintext_b, &file_key_b, file_id_b,
-        )
-        .expect("write b");
+        let plaintext_a: Vec<u8> = (0..CHUNK_SIZE as usize * 2)
+            .map(|i| (i % 256) as u8)
+            .collect();
+        let plaintext_b: Vec<u8> = (0..CHUNK_SIZE as usize * 2)
+            .map(|i| ((i + 100) % 256) as u8)
+            .collect();
+        let encoded_a =
+            crate::storage::format::writer::write_file_bytes(&plaintext_a, &file_key, file_id_a)
+                .expect("write a");
+        let encoded_b =
+            crate::storage::format::writer::write_file_bytes(&plaintext_b, &file_key_b, file_id_b)
+                .expect("write b");
 
         // Swap chunk 0 of A with chunk 0 of B (different file_ids).
         let (hdr_a, header_len_a) = header::read_header(&encoded_a, &file_key).expect("header a");
@@ -466,7 +468,9 @@ mod tests {
         let mut substituted = encoded_a.clone();
         substituted.splice(
             header_len_a..header_len_a + chunk_a_len,
-            encoded_b[header_len_b..header_len_b + chunk_b_len].iter().cloned(),
+            encoded_b[header_len_b..header_len_b + chunk_b_len]
+                .iter()
+                .cloned(),
         );
 
         let err = read_range(&substituted, 0, CHUNK_SIZE, &file_key).unwrap_err();
@@ -477,10 +481,9 @@ mod tests {
     fn negative_tampered_header_ciphertext() {
         let (_mvk, file_key, file_id) = setup();
         let plaintext = vec![1u8; 100];
-        let mut encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write");
+        let mut encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write");
         let ct_start = header::HEADER_FIXED_LEN + NONCE_LEN;
         encoded[ct_start] ^= 0x01;
 
@@ -492,10 +495,9 @@ mod tests {
     fn negative_tampered_header_aad() {
         let (_mvk, file_key, file_id) = setup();
         let plaintext = vec![1u8; 100];
-        let mut encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write");
+        let mut encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write");
         encoded[0] ^= 0xFF; // tamper magic byte (in AAD)
 
         let err = read_range(&encoded, 0, 100, &file_key).unwrap_err();
@@ -510,10 +512,9 @@ mod tests {
         let file_key_a = FileKey::derive(&mvk_a, &file_id).expect("derive a");
         let file_key_b = FileKey::derive(&mvk_b, &file_id).expect("derive b");
         let plaintext = vec![1u8; 100];
-        let encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key_a, file_id,
-        )
-        .expect("write");
+        let encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key_a, file_id)
+                .expect("write");
 
         let err = read_range(&encoded, 0, 100, &file_key_b).unwrap_err();
         assert!(
@@ -534,10 +535,9 @@ mod tests {
             chunk.copy_from_slice(&pattern);
         }
 
-        let encoded = crate::storage::format::writer::write_file_bytes(
-            &plaintext, &file_key, file_id,
-        )
-        .expect("write 1 GiB");
+        let encoded =
+            crate::storage::format::writer::write_file_bytes(&plaintext, &file_key, file_id)
+                .expect("write 1 GiB");
 
         verify_file(&encoded, &file_key).expect("verify 1 GiB");
 
@@ -550,13 +550,7 @@ mod tests {
         ];
         for (s, e) in ranges {
             let out = read_range(&encoded, s, e, &file_key).expect("read range");
-            assert_eq!(
-                out,
-                plaintext[s as usize..e as usize],
-                "range {}-{}",
-                s,
-                e
-            );
+            assert_eq!(out, plaintext[s as usize..e as usize], "range {}-{}", s, e);
         }
     }
 }

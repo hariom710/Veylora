@@ -1,8 +1,8 @@
 //! Folder metadata operations with encrypted names/timestamps.
 
 use crate::database::crypto::encrypt_meta;
-use crate::database::DbError;
 use crate::database::Db;
+use crate::database::DbError;
 
 /// A folder record with decrypted metadata fields.
 #[derive(Debug, Clone)]
@@ -25,14 +25,8 @@ pub fn insert_folder(
     name: &str,
 ) -> Result<u64, DbError> {
     let now = now_unix();
-    let (n_nonce, n_cipher) = encrypt_meta(
-        metadata_key,
-        TABLE,
-        0,
-        "name",
-        name.as_bytes(),
-    )
-    .map_err(|e| DbError::Sql(e.to_string()))?;
+    let (n_nonce, n_cipher) = encrypt_meta(metadata_key, TABLE, 0, "name", name.as_bytes())
+        .map_err(|e| DbError::Sql(e.to_string()))?;
     let (ca_nonce, ca_cipher) = encrypt_meta(
         metadata_key,
         TABLE,
@@ -42,12 +36,21 @@ pub fn insert_folder(
     )
     .map_err(|e| DbError::Sql(e.to_string()))?;
 
-    db.conn.execute(
-        "INSERT INTO folders (vault_id, parent_id, name_nonce, name_ciphertext,
+    db.conn
+        .execute(
+            "INSERT INTO folders (vault_id, parent_id, name_nonce, name_ciphertext,
             created_at_nonce, created_at_ciphertext)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        rusqlite::params![vault_id as i64, parent_id.map(|v| v as i64), n_nonce, n_cipher, ca_nonce, ca_cipher],
-    ).map_err(DbError::from)?;
+            rusqlite::params![
+                vault_id as i64,
+                parent_id.map(|v| v as i64),
+                n_nonce,
+                n_cipher,
+                ca_nonce,
+                ca_cipher
+            ],
+        )
+        .map_err(DbError::from)?;
 
     let id: i64 = db
         .conn
@@ -55,14 +58,8 @@ pub fn insert_folder(
         .map_err(DbError::from)?;
 
     // Re-encrypt with correct row_id in AAD
-    let (n_nonce, n_cipher) = encrypt_meta(
-        metadata_key,
-        TABLE,
-        id as u64,
-        "name",
-        name.as_bytes(),
-    )
-    .map_err(|e| DbError::Sql(e.to_string()))?;
+    let (n_nonce, n_cipher) = encrypt_meta(metadata_key, TABLE, id as u64, "name", name.as_bytes())
+        .map_err(|e| DbError::Sql(e.to_string()))?;
     let (ca_nonce, ca_cipher) = encrypt_meta(
         metadata_key,
         TABLE,
@@ -72,11 +69,13 @@ pub fn insert_folder(
     )
     .map_err(|e| DbError::Sql(e.to_string()))?;
 
-    db.conn.execute(
-        "UPDATE folders SET name_nonce = ?2, name_ciphertext = ?3,
+    db.conn
+        .execute(
+            "UPDATE folders SET name_nonce = ?2, name_ciphertext = ?3,
              created_at_nonce = ?4, created_at_ciphertext = ?5 WHERE id = ?1",
-        rusqlite::params![id, n_nonce, n_cipher, ca_nonce, ca_cipher],
-    ).map_err(DbError::from)?;
+            rusqlite::params![id, n_nonce, n_cipher, ca_nonce, ca_cipher],
+        )
+        .map_err(DbError::from)?;
 
     Ok(id as u64)
 }
@@ -112,8 +111,7 @@ pub fn get_folder(db: &Db, metadata_key: &[u8; 32], id: u64) -> Result<FolderRec
     let (vault_id, parent_id, n_nonce, n_cipher, ca_nonce, ca_cipher) = row;
 
     let name = decrypt_string(metadata_key, TABLE, id, "name", &n_nonce, &n_cipher)?;
-    let created_at =
-        decrypt_string(metadata_key, TABLE, id, "created_at", &ca_nonce, &ca_cipher)?;
+    let created_at = decrypt_string(metadata_key, TABLE, id, "created_at", &ca_nonce, &ca_cipher)?;
 
     Ok(FolderRecord {
         id,
@@ -124,53 +122,66 @@ pub fn get_folder(db: &Db, metadata_key: &[u8; 32], id: u64) -> Result<FolderRec
     })
 }
 
+/// One raw `folders` SELECT row, in column order.
+type FolderRow = (u64, u64, Option<u64>, Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>);
+
 /// List child folders of a parent (parent_id = None means root).
 pub fn list_children(
     db: &Db,
     metadata_key: &[u8; 32],
     parent_id: Option<u64>,
 ) -> Result<Vec<FolderRecord>, DbError> {
-    let mut rows: Vec<(u64, u64, Option<u64>, Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)> = Vec::new();
+    let mut rows: Vec<FolderRow> = Vec::new();
 
     match parent_id {
         Some(pid) => {
-            let mut stmt = db.conn.prepare(
-                "SELECT id, vault_id, parent_id, name_nonce, name_ciphertext,
+            let mut stmt = db
+                .conn
+                .prepare(
+                    "SELECT id, vault_id, parent_id, name_nonce, name_ciphertext,
                         created_at_nonce, created_at_ciphertext
                  FROM folders WHERE parent_id = ?1",
-            ).map_err(DbError::from)?;
-            let file_rows = stmt.query_map(rusqlite::params![pid as i64], |row| {
-                Ok((
-                    row.get::<_, i64>(0)? as u64,
-                    row.get::<_, i64>(1)? as u64,
-                    row.get::<_, Option<i64>>(2)?.map(|v| v as u64),
-                    row.get::<_, Vec<u8>>(3)?,
-                    row.get::<_, Vec<u8>>(4)?,
-                    row.get::<_, Vec<u8>>(5)?,
-                    row.get::<_, Vec<u8>>(6)?,
-                ))
-            }).map_err(DbError::from)?;
+                )
+                .map_err(DbError::from)?;
+            let file_rows = stmt
+                .query_map(rusqlite::params![pid as i64], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)? as u64,
+                        row.get::<_, i64>(1)? as u64,
+                        row.get::<_, Option<i64>>(2)?.map(|v| v as u64),
+                        row.get::<_, Vec<u8>>(3)?,
+                        row.get::<_, Vec<u8>>(4)?,
+                        row.get::<_, Vec<u8>>(5)?,
+                        row.get::<_, Vec<u8>>(6)?,
+                    ))
+                })
+                .map_err(DbError::from)?;
             for r in file_rows {
                 rows.push(r.map_err(DbError::from)?);
             }
         }
         None => {
-            let mut stmt = db.conn.prepare(
-                "SELECT id, vault_id, parent_id, name_nonce, name_ciphertext,
+            let mut stmt = db
+                .conn
+                .prepare(
+                    "SELECT id, vault_id, parent_id, name_nonce, name_ciphertext,
                         created_at_nonce, created_at_ciphertext
                  FROM folders WHERE parent_id IS NULL",
-            ).map_err(DbError::from)?;
-            let file_rows = stmt.query_map([], |row| {
-                Ok((
-                    row.get::<_, i64>(0)? as u64,
-                    row.get::<_, i64>(1)? as u64,
-                    row.get::<_, Option<i64>>(2)?.map(|v| v as u64),
-                    row.get::<_, Vec<u8>>(3)?,
-                    row.get::<_, Vec<u8>>(4)?,
-                    row.get::<_, Vec<u8>>(5)?,
-                    row.get::<_, Vec<u8>>(6)?,
-                ))
-            }).map_err(DbError::from)?;
+                )
+                .map_err(DbError::from)?;
+            let file_rows = stmt
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)? as u64,
+                        row.get::<_, i64>(1)? as u64,
+                        row.get::<_, Option<i64>>(2)?.map(|v| v as u64),
+                        row.get::<_, Vec<u8>>(3)?,
+                        row.get::<_, Vec<u8>>(4)?,
+                        row.get::<_, Vec<u8>>(5)?,
+                        row.get::<_, Vec<u8>>(6)?,
+                    ))
+                })
+                .map_err(DbError::from)?;
             for r in file_rows {
                 rows.push(r.map_err(DbError::from)?);
             }
@@ -180,7 +191,8 @@ pub fn list_children(
     let mut records = Vec::new();
     for (id, vault_id, parent_id, n_nonce, n_cipher, ca_nonce, ca_cipher) in rows {
         let name = decrypt_string(metadata_key, TABLE, id, "name", &n_nonce, &n_cipher)?;
-        let created_at = decrypt_string(metadata_key, TABLE, id, "created_at", &ca_nonce, &ca_cipher)?;
+        let created_at =
+            decrypt_string(metadata_key, TABLE, id, "created_at", &ca_nonce, &ca_cipher)?;
         records.push(FolderRecord {
             id,
             vault_id,
@@ -201,19 +213,15 @@ pub fn rename_folder(
 ) -> Result<(), DbError> {
     get_folder(db, metadata_key, id)?;
 
-    let (nonce, ciphertext) = encrypt_meta(
-        metadata_key,
-        TABLE,
-        id,
-        "name",
-        new_name.as_bytes(),
-    )
-    .map_err(|e| DbError::Sql(e.to_string()))?;
+    let (nonce, ciphertext) = encrypt_meta(metadata_key, TABLE, id, "name", new_name.as_bytes())
+        .map_err(|e| DbError::Sql(e.to_string()))?;
 
-    db.conn.execute(
-        "UPDATE folders SET name_nonce = ?2, name_ciphertext = ?3 WHERE id = ?1",
-        rusqlite::params![id as i64, nonce, ciphertext],
-    ).map_err(DbError::from)?;
+    db.conn
+        .execute(
+            "UPDATE folders SET name_nonce = ?2, name_ciphertext = ?3 WHERE id = ?1",
+            rusqlite::params![id as i64, nonce, ciphertext],
+        )
+        .map_err(DbError::from)?;
 
     Ok(())
 }
@@ -231,7 +239,12 @@ fn decrypt_string(
         .try_into()
         .map_err(|_| DbError::Sql("invalid nonce length".to_string()))?;
     let plaintext = crate::database::crypto::decrypt_meta(
-        metadata_key, table, row_id, column, &nonce_arr, ciphertext,
+        metadata_key,
+        table,
+        row_id,
+        column,
+        &nonce_arr,
+        ciphertext,
     )
     .map_err(|e| DbError::Sql(e.to_string()))?;
     String::from_utf8(plaintext).map_err(|e| DbError::Sql(e.to_string()))
@@ -256,9 +269,11 @@ mod tests {
     fn setup_db() -> (Db, [u8; 32], PathBuf) {
         static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let id = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let tmp = std::env::current_dir()
-            .unwrap()
-            .join(format!("target/debug/test-vault-folders-{}-{}", std::process::id(), id));
+        let tmp = std::env::current_dir().unwrap().join(format!(
+            "target/debug/test-vault-folders-{}-{}",
+            std::process::id(),
+            id
+        ));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
         let mvk = Mvk::generate().expect("mvk");
@@ -308,7 +323,8 @@ mod tests {
         let db_path = tmp.join("vault.db");
         let raw = fs::read(&db_path).expect("read db");
         assert!(
-            !raw.windows(b"VerySecretFolder".len()).any(|w| w == b"VerySecretFolder"),
+            !raw.windows(b"VerySecretFolder".len())
+                .any(|w| w == b"VerySecretFolder"),
             "plaintext folder name found in vault.db bytes!"
         );
     }

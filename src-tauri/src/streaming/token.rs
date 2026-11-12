@@ -1,5 +1,5 @@
-use subtle::ConstantTimeEq;
 use std::sync::Mutex;
+use subtle::ConstantTimeEq;
 
 /// TokenStore owns the current session token and provides validation.
 /// The token is a random 32-byte value hex-encoded (64 chars).
@@ -15,7 +15,9 @@ pub struct TokenStore {
 impl TokenStore {
     /// Create a new TokenStore with no token (vault initially locked).
     pub fn new() -> Self {
-        Self { token: Mutex::new(None) }
+        Self {
+            token: Mutex::new(None),
+        }
     }
 
     /// Generate a new random 32-byte token, replacing any existing one.
@@ -49,5 +51,11 @@ impl TokenStore {
     /// Get the current token for rotation on unlock.
     pub fn current(&self) -> Option<String> {
         self.token.lock().unwrap().clone()
+    }
+}
+
+impl Default for TokenStore {
+    fn default() -> Self {
+        Self::new()
     }
 }

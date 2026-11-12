@@ -4,6 +4,7 @@
 //! end-to-end, including tamper detection, atomic restore, and locked-session
 //! rejection.
 
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use veylora::auth::session::{Session, SessionManager};
 use veylora::auth::UnlockMethod;
@@ -14,21 +15,17 @@ use veylora::crypto::mvk::Mvk;
 use veylora::crypto::recovery::generate_recovery_key;
 use veylora::database::Db;
 use veylora::storage::vault_dir::VaultDir;
-use veylora::streaming::hex_encode;
 use veylora::vault::VaultMeta;
-use std::sync::Arc;
 
 fn setup_vault_dir() -> std::path::PathBuf {
-    let tmp = std::env::current_dir()
-        .unwrap()
-        .join(format!(
-            "target/debug/test-phase7-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()
-        ));
+    let tmp = std::env::current_dir().unwrap().join(format!(
+        "target/debug/test-phase7-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
     tmp
@@ -70,7 +67,7 @@ fn create_restore_vault(src_vdir: &VaultDir, restore_dir: &std::path::Path) -> (
     (db, vdir)
 }
 
-fn unlock_vault(db: &Db, mvk: &Mvk, vdir: &VaultDir) -> SessionManager {
+fn unlock_vault(_db: &Db, mvk: &Mvk, vdir: &VaultDir) -> SessionManager {
     let manager = SessionManager::new();
     let session = Session::new(mvk.clone(), 1, UnlockMethod::Pin);
     manager.set_session(session, vdir.meta_path.to_string_lossy().to_string());
@@ -102,16 +99,11 @@ fn add_file_to_vault(
     )
     .expect("insert file");
 
-    let file_key = veylora::storage::format::FileKey::derive(&mvk, &file_id_bytes)
-        .expect("derive file key");
+    let file_key =
+        veylora::storage::format::FileKey::derive(mvk, &file_id_bytes).expect("derive file key");
     let mut reader = std::io::Cursor::new(plaintext);
-    veylora::storage::blob::write_blob(
-        &vdir.root,
-        &file_id_bytes,
-        &mut reader,
-        &file_key,
-    )
-    .expect("write blob");
+    veylora::storage::blob::write_blob(&vdir.root, &file_id_bytes, &mut reader, &file_key)
+        .expect("write blob");
 
     file_id_hex
 }
@@ -149,13 +141,9 @@ fn phase7_backup_create_three_files() {
     assert!(!manager.is_locked(), "vault should be unlocked");
 
     let backup_path = tmp_dir.join("test-backup.vey");
-    let backup_info = create::create_backup(
-        mvk.as_bytes(),
-        &db,
-        &vdir,
-        backup_path.to_str().unwrap(),
-    )
-    .expect("create backup");
+    let backup_info =
+        create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+            .expect("create backup");
 
     assert!(backup_path.exists(), "backup file should exist");
     assert_eq!(backup_info.file_count, 3, "should have 3 files");
@@ -177,19 +165,24 @@ fn phase7_backup_verify_created() {
     let manager = unlock_vault(&db, &mvk, &vdir);
 
     let backup_path = tmp_dir.join("test-backup.vey");
-    create::create_backup(
-        mvk.as_bytes(),
-        &db,
-        &vdir,
-        backup_path.to_str().unwrap(),
-    )
-    .expect("create backup");
+    create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+        .expect("create backup");
 
     let verify_info = verify::verify_backup(Some(mvk.as_bytes()), backup_path.to_str().unwrap())
         .expect("verify backup");
     assert_eq!(verify_info.file_count, 1, "verify should see 1 file");
-    assert!(verify_info.verified_fields.contains(&"manifest".to_string()), "should verify manifest");
-    assert!(verify_info.verified_fields.contains(&"blobs_hash".to_string()), "should verify blobs_hash");
+    assert!(
+        verify_info
+            .verified_fields
+            .contains(&"manifest".to_string()),
+        "should verify manifest"
+    );
+    assert!(
+        verify_info
+            .verified_fields
+            .contains(&"blobs_hash".to_string()),
+        "should verify blobs_hash"
+    );
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
     let _ = manager;
@@ -208,13 +201,8 @@ fn phase7_backup_restore_roundtrip() {
     let manager = unlock_vault(&db, &mvk, &vdir);
 
     let backup_path = tmp_dir.join("test-backup.vey");
-    create::create_backup(
-        mvk.as_bytes(),
-        &db,
-        &vdir,
-        backup_path.to_str().unwrap(),
-    )
-    .expect("create backup");
+    create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+        .expect("create backup");
 
     let restore_dir = setup_vault_dir();
     let (mut restore_db, restore_vdir) = create_restore_vault(&vdir, &restore_dir);
@@ -231,8 +219,7 @@ fn phase7_backup_restore_roundtrip() {
     assert_eq!(restore_info.files_restored, 3, "should restore 3 files");
     assert!(restore_info.bytes_written > 0, "should write bytes");
 
-    let metadata_key =
-        derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY).expect("metadata key");
+    let metadata_key = derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY).expect("metadata key");
     let files = veylora::database::files::list_files(&restore_db, &metadata_key, None)
         .expect("list restored files");
     assert_eq!(files.len(), 3, "should have 3 files in restored vault");
@@ -250,18 +237,13 @@ fn phase7_backup_read_via_protocol() {
     let (db, mvk, vdir) = create_test_vault(&tmp_dir);
 
     let plaintext = b"Hello World this is a test file for veylora phase7 roundtrip";
-    let file_id_hex = add_file_to_vault(&db, &mvk, &vdir, plaintext, "roundtrip.txt");
+    let _file_id_hex = add_file_to_vault(&db, &mvk, &vdir, plaintext, "roundtrip.txt");
 
     let manager = unlock_vault(&db, &mvk, &vdir);
 
     let backup_path = tmp_dir.join("test-backup.vey");
-    create::create_backup(
-        mvk.as_bytes(),
-        &db,
-        &vdir,
-        backup_path.to_str().unwrap(),
-    )
-    .expect("create backup");
+    create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+        .expect("create backup");
 
     let restore_dir = setup_vault_dir();
     let (mut restore_db, restore_vdir) = create_restore_vault(&vdir, &restore_dir);
@@ -276,21 +258,19 @@ fn phase7_backup_read_via_protocol() {
     .expect("restore backup");
 
     // Read restored file via protocol handler
-    let metadata_key =
-        derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY).expect("metadata key");
+    let metadata_key = derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY).expect("metadata key");
     let files = veylora::database::files::list_files(&restore_db, &metadata_key, None)
         .expect("list restored files");
     assert_eq!(files.len(), 1);
 
     let file_id_bytes: [u8; 16] = hex_decode(&files[0].file_id).expect("decode file_id");
-    let file_key = veylora::storage::format::FileKey::derive(&mvk, &file_id_bytes)
-        .expect("derive file key");
+    let file_key =
+        veylora::storage::format::FileKey::derive(&mvk, &file_id_bytes).expect("derive file key");
 
     // Read the restored blob and verify via format reader
     let blob_path = restore_vdir.blob_path(&file_id_bytes);
     let blob_data = std::fs::read(&blob_path).expect("read blob");
-    veylora::storage::format::verify_file(&blob_data, &file_key)
-        .expect("verify restored blob");
+    veylora::storage::format::verify_file(&blob_data, &file_key).expect("verify restored blob");
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
     let _ = std::fs::remove_dir_all(&restore_dir);
@@ -309,13 +289,8 @@ fn phase7_backup_history_recorded() {
     let manager = unlock_vault(&db, &mvk, &vdir);
 
     let backup_path = tmp_dir.join("history.vey");
-    create::create_backup(
-        mvk.as_bytes(),
-        &db,
-        &vdir,
-        backup_path.to_str().unwrap(),
-    )
-    .expect("create backup");
+    create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+        .expect("create backup");
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -343,13 +318,8 @@ fn phase7_backup_tamper_manifest_detected() {
     let manager = unlock_vault(&db, &mvk, &vdir);
 
     let backup_path = tmp_dir.join("tamper-manifest.vey");
-    create::create_backup(
-        mvk.as_bytes(),
-        &db,
-        &vdir,
-        backup_path.to_str().unwrap(),
-    )
-    .expect("create backup");
+    create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+        .expect("create backup");
 
     let mut data = std::fs::read(&backup_path).expect("read backup");
     let flip_pos = data.len() / 2;
@@ -357,10 +327,7 @@ fn phase7_backup_tamper_manifest_detected() {
     std::fs::write(&backup_path, &data).expect("write tampered backup");
 
     let result = verify::verify_backup(Some(mvk.as_bytes()), backup_path.to_str().unwrap());
-    assert!(
-        result.is_err(),
-        "tampered backup should fail verification"
-    );
+    assert!(result.is_err(), "tampered backup should fail verification");
     match result.unwrap_err() {
         veylora::backup::BackupError::Corrupted(_) => {}
         other => panic!("expected Corrupted error, got {:?}", other),
@@ -380,13 +347,8 @@ fn phase7_backup_tamper_blob_detected() {
     let manager = unlock_vault(&db, &mvk, &vdir);
 
     let backup_path = tmp_dir.join("tamper-blob.vey");
-    create::create_backup(
-        mvk.as_bytes(),
-        &db,
-        &vdir,
-        backup_path.to_str().unwrap(),
-    )
-    .expect("create backup");
+    create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+        .expect("create backup");
 
     let mut data = std::fs::read(&backup_path).expect("read backup");
     let flip_pos = data.len() - 100;
@@ -394,8 +356,7 @@ fn phase7_backup_tamper_blob_detected() {
         data[flip_pos] ^= 0x01;
         std::fs::write(&backup_path, &data).expect("write tampered backup");
 
-        let result =
-            verify::verify_backup(Some(mvk.as_bytes()), backup_path.to_str().unwrap());
+        let result = verify::verify_backup(Some(mvk.as_bytes()), backup_path.to_str().unwrap());
         assert!(
             result.is_err(),
             "tampered blob backup should fail verification"
@@ -416,23 +377,15 @@ fn phase7_backup_truncate_trailer_detected() {
     let manager = unlock_vault(&db, &mvk, &vdir);
 
     let backup_path = tmp_dir.join("truncate-trailer.vey");
-    create::create_backup(
-        mvk.as_bytes(),
-        &db,
-        &vdir,
-        backup_path.to_str().unwrap(),
-    )
-    .expect("create backup");
+    create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+        .expect("create backup");
 
     let data = std::fs::read(&backup_path).expect("read backup");
     let truncated = &data[..data.len() - 10];
     std::fs::write(&backup_path, truncated).expect("write truncated backup");
 
     let result = verify::verify_backup(Some(mvk.as_bytes()), backup_path.to_str().unwrap());
-    assert!(
-        result.is_err(),
-        "truncated backup should fail verification"
-    );
+    assert!(result.is_err(), "truncated backup should fail verification");
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
     let _ = manager;
@@ -448,13 +401,8 @@ fn phase7_backup_swap_manifest_fails() {
     let manager = unlock_vault(&db, &mvk, &vdir);
 
     let backup_path = tmp_dir.join("swap-manifest.vey");
-    create::create_backup(
-        mvk.as_bytes(),
-        &db,
-        &vdir,
-        backup_path.to_str().unwrap(),
-    )
-    .expect("create backup");
+    create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+        .expect("create backup");
 
     // Tamper meta_len in header (offset 36 + payload_len). Header AAD includes meta_len,
     // so changing it without updating header_tag will cause AEAD failure.
@@ -464,17 +412,17 @@ fn phase7_backup_swap_manifest_fails() {
     let mut data = std::fs::read(&backup_path).expect("read backup");
     let payload_len = u32::from_le_bytes([data[32], data[33], data[34], data[35]]) as usize;
     let meta_len_offset = 36 + payload_len;
-    assert!(meta_len_offset + 4 <= data.len(), "meta_len offset within bounds");
+    assert!(
+        meta_len_offset + 4 <= data.len(),
+        "meta_len offset within bounds"
+    );
 
     // Flip a byte in meta_len - header AAD binds meta_len, so AEAD will fail
     data[meta_len_offset] ^= 0x01;
     std::fs::write(&backup_path, &data).expect("write tampered backup");
 
     let result = verify::verify_backup(Some(mvk.as_bytes()), backup_path.to_str().unwrap());
-    assert!(
-        result.is_err(),
-        "tampered meta_len should fail header AEAD"
-    );
+    assert!(result.is_err(), "tampered meta_len should fail header AEAD");
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
     let _ = manager;
@@ -490,21 +438,12 @@ fn phase7_backup_wrong_mvk_fails() {
     let manager = unlock_vault(&db, &mvk, &vdir);
 
     let backup_path = tmp_dir.join("wrong-mvk.vey");
-    create::create_backup(
-        mvk.as_bytes(),
-        &db,
-        &vdir,
-        backup_path.to_str().unwrap(),
-    )
-    .expect("create backup");
+    create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+        .expect("create backup");
 
     let wrong_mvk = Mvk::generate().expect("wrong mvk");
-    let result =
-        verify::verify_backup(Some(wrong_mvk.as_bytes()), backup_path.to_str().unwrap());
-    assert!(
-        result.is_err(),
-        "wrong MVK should fail verification"
-    );
+    let result = verify::verify_backup(Some(wrong_mvk.as_bytes()), backup_path.to_str().unwrap());
+    assert!(result.is_err(), "wrong MVK should fail verification");
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
     let _ = manager;
@@ -520,13 +459,8 @@ fn phase7_backup_restore_file_exists() {
     let manager = unlock_vault(&db, &mvk, &vdir);
 
     let backup_path = tmp_dir.join("file-exists.vey");
-    create::create_backup(
-        mvk.as_bytes(),
-        &db,
-        &vdir,
-        backup_path.to_str().unwrap(),
-    )
-    .expect("create backup");
+    create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+        .expect("create backup");
 
     let result = restore::restore_backup(
         mvk.as_bytes(),
@@ -534,10 +468,7 @@ fn phase7_backup_restore_file_exists() {
         &vdir,
         backup_path.to_str().unwrap(),
     );
-    assert!(
-        result.is_err(),
-        "restore with existing file_id should fail"
-    );
+    assert!(result.is_err(), "restore with existing file_id should fail");
     match result.unwrap_err() {
         veylora::backup::BackupError::FileExists { file_id } => {
             assert_eq!(file_id, file1, "should report the existing file_id");
@@ -560,13 +491,8 @@ fn phase7_backup_restore_atomic_failure() {
     let manager = unlock_vault(&db, &mvk, &vdir);
 
     let backup_path = tmp_dir.join("atomic-failure.vey");
-    create::create_backup(
-        mvk.as_bytes(),
-        &db,
-        &vdir,
-        backup_path.to_str().unwrap(),
-    )
-    .expect("create backup");
+    create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+        .expect("create backup");
 
     // Tamper one byte in the blob region so verify_file fails mid-restore
     let mut data = std::fs::read(&backup_path).expect("read backup");
@@ -592,8 +518,7 @@ fn phase7_backup_restore_atomic_failure() {
     );
 
     // Verify no files were added to the restore vault
-    let metadata_key =
-        derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY).expect("metadata key");
+    let metadata_key = derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY).expect("metadata key");
     let files = veylora::database::files::list_files(&restore_db, &metadata_key, None)
         .expect("list restored files");
     assert_eq!(files.len(), 0, "no files should be added on atomic failure");
@@ -616,23 +541,12 @@ fn phase7_backup_restore_while_locked() {
     assert!(manager.is_locked(), "session should be locked");
 
     let backup_path = tmp_dir.join("locked-restore.vey");
-    create::create_backup(
-        mvk.as_bytes(),
-        &db,
-        &vdir,
-        backup_path.to_str().unwrap(),
-    )
-    .expect("create backup");
+    create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+        .expect("create backup");
 
     // Try to restore while locked - command wrapper returns Locked
-    let result = vault_backup_restore(
-        backup_path.to_str().unwrap().to_string(),
-        Arc::new(manager),
-    );
-    assert!(
-        result.is_err(),
-        "restore while locked should return Locked"
-    );
+    let result = vault_backup_restore(backup_path.to_str().unwrap().to_string(), Arc::new(manager));
+    assert!(result.is_err(), "restore while locked should return Locked");
     assert_eq!(
         result.unwrap_err(),
         "vault is locked",
@@ -653,14 +567,8 @@ fn phase7_backup_create_while_locked() {
     assert!(manager.is_locked(), "session should be locked");
 
     // Create backup while locked - command wrapper returns Locked
-    let result = vault_backup_create(
-        "test.vey".to_string(),
-        Arc::new(manager),
-    );
-    assert!(
-        result.is_err(),
-        "create while locked should return Locked"
-    );
+    let result = vault_backup_create("test.vey".to_string(), Arc::new(manager));
+    assert!(result.is_err(), "create while locked should return Locked");
     assert_eq!(
         result.unwrap_err(),
         "vault is locked",
@@ -690,13 +598,9 @@ fn phase7_backup_100mib_roundtrip() {
     assert!(!manager.is_locked(), "vault should be unlocked");
 
     let backup_path = tmp_dir.join("large-backup.vey");
-    let backup_info = create::create_backup(
-        mvk.as_bytes(),
-        &db,
-        &vdir,
-        backup_path.to_str().unwrap(),
-    )
-    .expect("create backup");
+    let backup_info =
+        create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+            .expect("create backup");
 
     assert!(backup_path.exists(), "backup file should exist");
     assert_eq!(backup_info.file_count, 1, "should have 1 file");
@@ -731,8 +635,7 @@ fn phase7_backup_100mib_roundtrip() {
             .expect("derive file key");
         let blob_path = restore_vdir.blob_path(&file_id_bytes);
         let blob_data = std::fs::read(&blob_path).expect("read blob");
-        veylora::storage::format::verify_file(&blob_data, &file_key)
-            .expect("verify restored blob");
+        veylora::storage::format::verify_file(&blob_data, &file_key).expect("verify restored blob");
     }
 
     let _ = std::fs::remove_dir_all(&tmp_dir);

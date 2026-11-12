@@ -5,7 +5,7 @@
 
 use crate::crypto::mvk::Mvk;
 use crate::storage::format::{
-    chunk, finalize, header, CHUNK_SIZE, NONCE_LEN, FormatError, FileKey, Result,
+    chunk, finalize, header, FileKey, FormatError, Result, CHUNK_SIZE, NONCE_LEN,
 };
 use std::io::{Read, Write};
 
@@ -23,7 +23,9 @@ pub fn write_file(
     let mut total_length: u64 = 0;
     let mut tmp = [0u8; CHUNK_SIZE as usize];
     loop {
-        let n = reader.read(&mut tmp).map_err(|e| FormatError::Io(e.to_string()))?;
+        let n = reader
+            .read(&mut tmp)
+            .map_err(|e| FormatError::Io(e.to_string()))?;
         if n == 0 {
             break;
         }
@@ -51,22 +53,20 @@ pub fn write_file(
             plaintext,
         )?;
         let nonce = chunk::chunk_nonce(file_key, i as u64);
-        dest.write_all(&nonce).map_err(|e| FormatError::Io(e.to_string()))?;
-        dest.write_all(&enc).map_err(|e| FormatError::Io(e.to_string()))?;
+        dest.write_all(&nonce)
+            .map_err(|e| FormatError::Io(e.to_string()))?;
+        dest.write_all(&enc)
+            .map_err(|e| FormatError::Io(e.to_string()))?;
         written += (NONCE_LEN + enc.len()) as u64;
         chunk_ct_tags.push(enc);
     }
 
     // Write finalize record.
     let root_hash = finalize::compute_root_hash(&chunk_ct_tags);
-    let fin = finalize::encrypt_finalize(
-        file_key,
-        &file_id,
-        total_chunks,
-        total_length,
-        &root_hash,
-    );
-    dest.write_all(&fin).map_err(|e| FormatError::Io(e.to_string()))?;
+    let fin =
+        finalize::encrypt_finalize(file_key, &file_id, total_chunks, total_length, &root_hash);
+    dest.write_all(&fin)
+        .map_err(|e| FormatError::Io(e.to_string()))?;
     written += fin.len() as u64;
 
     Ok(written)

@@ -85,9 +85,7 @@ use rusqlite::OptionalExtension;
 
 /// Ensure the schema_migrations table exists and apply pending migrations.
 pub fn apply_migrations(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY)",
-    )?;
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY)")?;
 
     for (version, sql) in MIGRATIONS {
         let already: Option<String> = conn

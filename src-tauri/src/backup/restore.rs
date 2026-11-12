@@ -5,19 +5,17 @@
 
 use std::io::Read;
 
-use crate::backup::{
-    container, BackupError, RestoreInfo, Result,
-};
+use crate::backup::{container, BackupError, RestoreInfo, Result};
 
 use sha2::{Digest, Sha256};
 
 use crate::crypto::hkdf::{LABEL_BACKUP_KEY, LABEL_METADATA_KEY};
 use crate::crypto::mvk::Mvk;
 use crate::database::Db;
-use rusqlite::OptionalExtension;
 use crate::storage::blob::write_blob;
-use crate::storage::format::{FileKey, verify_file};
+use crate::storage::format::{verify_file, FileKey};
 use crate::storage::vault_dir::VaultDir;
+use rusqlite::OptionalExtension;
 
 /// Derive backup_key = HKDF(MVK, "veylora/v1/backup-key").
 fn derive_backup_key(mvk: &[u8; 32]) -> Result<[u8; 32]> {
@@ -50,7 +48,7 @@ pub fn restore_backup(
         .map_err(|e| BackupError::Internal(e.to_string()))?;
 
     // Read the entire backup file.
-    let data = std::fs::read(backup_path).map_err(|e| BackupError::Io(e))?;
+    let data = std::fs::read(backup_path).map_err(BackupError::Io)?;
     if data.len() < container::TRAILER_FIXED_LEN {
         return Err(BackupError::InvalidContainer("file too small".to_string()));
     }
@@ -62,9 +60,9 @@ pub fn restore_backup(
 
     // 2. Read encrypted manifest and verify meta_hash.
     let mut manifest_encrypted = vec![0u8; header.meta_len as usize];
-    cursor.read_exact(&mut manifest_encrypted).map_err(|e| {
-        BackupError::InvalidContainer(format!("bad manifest read: {e}"))
-    })?;
+    cursor
+        .read_exact(&mut manifest_encrypted)
+        .map_err(|e| BackupError::InvalidContainer(format!("bad manifest read: {e}")))?;
 
     let mut hash = Sha256::new();
     hash.update(&manifest_encrypted);
@@ -75,17 +73,16 @@ pub fn restore_backup(
 
     // 3. Decrypt manifest.
     let manifest_nonce = derive_backup_nonce(&backup_key, b"manifest-nonce")?;
-    let manifest = container::ManifestRegion::read(
-        &manifest_encrypted,
-        &backup_key,
-        &manifest_nonce,
-    )?;
+    let manifest =
+        container::ManifestRegion::read(&manifest_encrypted, &backup_key, &manifest_nonce)?;
 
     // 4. Determine blob region bounds.
     let manifest_end = cursor.position() as usize;
     let trailer_start = data.len() - container::TRAILER_FIXED_LEN;
     if trailer_start < manifest_end {
-        return Err(BackupError::Corrupted("manifest overlaps trailer".to_string()));
+        return Err(BackupError::Corrupted(
+            "manifest overlaps trailer".to_string(),
+        ));
     }
 
     // 5. Start a DB transaction for all-or-nothing restore.
@@ -94,7 +91,10 @@ pub fn restore_backup(
     let mut restored_file_ids: Vec<String> = Vec::new();
     let mut restored_blob_paths: Vec<std::path::PathBuf> = Vec::new();
 
-    let tx = db.conn_mut().transaction().map_err(|e| BackupError::Internal(e.to_string()))?;
+    let tx = db
+        .conn_mut()
+        .transaction()
+        .map_err(|e| BackupError::Internal(e.to_string()))?;
 
     for entry in &manifest.entries {
         // Check for duplicate file_id.
@@ -119,18 +119,23 @@ pub fn restore_backup(
             .map_err(|e| BackupError::InvalidContainer(format!("bad blob read: {e}")))?;
 
         // Verify the blob with format v1 (validates chunk chain + finalize).
-        let file_key = FileKey::derive(
-            &Mvk::from_array(*mvk),
-            &entry.file_id,
-        )
-        .map_err(|e| BackupError::Internal(e.to_string()))?;
+        let file_key = FileKey::derive(&Mvk::from_array(*mvk), &entry.file_id)
+            .map_err(|e| BackupError::Internal(e.to_string()))?;
         verify_file(&blob_data, &file_key).map_err(|e| {
-            BackupError::Corrupted(format!("blob verification failed for {}: {e}", hex_encode(&entry.file_id)))
+            BackupError::Corrupted(format!(
+                "blob verification failed for {}: {e}",
+                hex_encode(&entry.file_id)
+            ))
         })?;
 
         // Write blob atomically.
-        let encrypted_size = write_blob(&vdir.root, &entry.file_id, &mut blob_data.as_slice(), &file_key)
-            .map_err(|e| BackupError::Internal(e.to_string()))?;
+        let encrypted_size = write_blob(
+            &vdir.root,
+            &entry.file_id,
+            &mut blob_data.as_slice(),
+            &file_key,
+        )
+        .map_err(|e| BackupError::Internal(e.to_string()))?;
         bytes_written += encrypted_size;
 
         let blob_path = vdir.blob_path(&entry.file_id);
@@ -221,15 +226,7 @@ pub fn restore_backup(
                  created_at_nonce = ?4, created_at_ciphertext = ?5,
                  modified_at_nonce = ?6, modified_at_ciphertext = ?7
              WHERE id = ?1",
-            rusqlite::params![
-                id,
-                fn_nonce,
-                fn_cipher,
-                ca_nonce,
-                ca_cipher,
-                ma_nonce,
-                ma_cipher,
-            ],
+            rusqlite::params![id, fn_nonce, fn_cipher, ca_nonce, ca_cipher, ma_nonce, ma_cipher,],
         )
         .map_err(|e| BackupError::Internal(e.to_string()))?;
 
@@ -240,18 +237,18 @@ pub fn restore_backup(
     // 6. Verify trailer.
     let trailer_data = &data[trailer_start..];
     let trailer_nonce = derive_backup_nonce(&backup_key, b"trailer-nonce")?;
-    let trailer = container::TrailerRegion::read(
-        &mut &trailer_data[..],
-        &backup_key,
-        &trailer_nonce,
-    )?;
+    let trailer =
+        container::TrailerRegion::read(&mut &trailer_data[..], &backup_key, &trailer_nonce)?;
 
     if trailer.file_count != manifest.entries.len() as u64 {
-        return Err(BackupError::Corrupted("trailer file count mismatch".to_string()));
+        return Err(BackupError::Corrupted(
+            "trailer file count mismatch".to_string(),
+        ));
     }
 
     // Commit the transaction.
-    tx.commit().map_err(|e| BackupError::Internal(e.to_string()))?;
+    tx.commit()
+        .map_err(|e| BackupError::Internal(e.to_string()))?;
 
     Ok(RestoreInfo {
         files_restored,
@@ -266,4 +263,3 @@ fn hex_encode(bytes: &[u8]) -> String {
     }
     out
 }
-

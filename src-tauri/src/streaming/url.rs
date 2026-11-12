@@ -47,7 +47,7 @@ pub fn parse_url(url: &str) -> Result<StreamRequest, StreamError> {
     }
 
     // Parse file_id into [u8; 32]
-    let file_id = parse_hex_32(&file_id_hex).map_err(|_| {
+    let file_id = parse_hex_32(file_id_hex).map_err(|_| {
         StreamError::UrlParse(format!(
             "file_id_hex must be valid hex, got: {}",
             file_id_hex
@@ -82,10 +82,7 @@ pub fn parse_url(url: &str) -> Result<StreamRequest, StreamError> {
                 }
 
                 let start = start_str.parse::<u64>().map_err(|_| {
-                    StreamError::UrlParse(format!(
-                        "range start must be u64, got: {}",
-                        start_str
-                    ))
+                    StreamError::UrlParse(format!("range start must be u64, got: {}", start_str))
                 })?;
 
                 if let Some(es) = end_str {
@@ -93,10 +90,7 @@ pub fn parse_url(url: &str) -> Result<StreamRequest, StreamError> {
                         range_end = None; // open-ended "100-"
                     } else {
                         let end = es.parse::<u64>().map_err(|_| {
-                            StreamError::UrlParse(format!(
-                                "range end must be u64, got: {}",
-                                es
-                            ))
+                            StreamError::UrlParse(format!("range end must be u64, got: {}", es))
                         })?;
                         if end < start {
                             return Err(StreamError::UrlParse(format!(
@@ -119,7 +113,9 @@ pub fn parse_url(url: &str) -> Result<StreamRequest, StreamError> {
     }
 
     if token.is_empty() {
-        return Err(StreamError::UrlParse("missing 'token' query parameter".to_string()));
+        return Err(StreamError::UrlParse(
+            "missing 'token' query parameter".to_string(),
+        ));
     }
 
     Ok(StreamRequest {
@@ -140,10 +136,10 @@ fn parse_hex_32(s: &str) -> Result<[u8; 32], StreamError> {
         )));
     }
     let mut b = [0u8; 32];
-    for i in 0..32 {
+    for (i, byte) in b.iter_mut().enumerate() {
         let high = hex_char_to_nibble(s.chars().nth(2 * i).unwrap_or('0'))?;
         let low = hex_char_to_nibble(s.chars().nth(2 * i + 1).unwrap_or('0'))?;
-        b[i] = (high << 4) | low;
+        *byte = (high << 4) | low;
     }
     Ok(b)
 }

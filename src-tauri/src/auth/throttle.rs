@@ -9,15 +9,15 @@
 //!   15 failures Ã¢â€ â€™ 1h lockout
 //!   20+ failures Ã¢â€ â€™ 24h lockout
 
-use std::time::{SystemTime, UNIX_EPOCH, Duration, Instant};
 use crate::database::Db;
 use rusqlite::OptionalExtension;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// Lockout durations in seconds, keyed by failure count thresholds.
-const LOCKOUT_PIN: i64 = 30;        // 5 failures
-const LOCKOUT_PASSWORD: i64 = 300;  // 10 failures (5 min)
+const LOCKOUT_PIN: i64 = 30; // 5 failures
+const LOCKOUT_PASSWORD: i64 = 300; // 10 failures (5 min)
 const LOCKOUT_RECOVERY: i64 = 3600; // 15 failures (1 hour)
-const LOCKOUT_MAX: i64 = 86400;     // 20+ failures (24 hours)
+const LOCKOUT_MAX: i64 = 86400; // 20+ failures (24 hours)
 
 /// Thresholds: (failed_count, lockout_seconds)
 const THRESHOLDS: [(u64, i64); 4] = [

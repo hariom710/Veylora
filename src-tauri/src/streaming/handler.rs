@@ -1,9 +1,12 @@
-use crate::streaming::{hex_encode, parse_url, StreamError, StreamRequest};
 use crate::auth::session::SessionManager;
 use crate::database::Db;
 use crate::storage::vault_dir::VaultDir;
+use crate::streaming::{hex_encode, parse_url, StreamError, StreamRequest};
 use crate::vault::VaultMeta;
 use rusqlite::OptionalExtension;
+
+/// Mid-stream hook shared by the two entry points: (session manager, chunk index).
+type OnChunk<'a> = Option<&'a dyn Fn(&SessionManager, u64)>;
 
 /// Core request handling: take a parsed URL request, a session manager,
 /// a database connection, and a vault directory, and return the decrypted
@@ -24,7 +27,7 @@ pub fn handle_request(
     db: &Db,
     dir: &VaultDir,
     req: StreamRequest,
-    on_chunk: Option<&dyn Fn(&SessionManager, u64)>,
+    on_chunk: OnChunk<'_>,
 ) -> Result<Vec<u8>, StreamError> {
     // 1. Check if vault is locked first
     if manager.is_locked() {
@@ -37,15 +40,22 @@ pub fn handle_request(
     }
 
     // 3. Read vault.meta
-    let meta_str = std::fs::read_to_string(&dir.meta_path)
-        .map_err(|_| StreamError::FileNotFound)?;
-    let _meta: VaultMeta = serde_json::from_str(&meta_str)
-        .map_err(|_| StreamError::FileNotFound)?;
+    let meta_str =
+        std::fs::read_to_string(&dir.meta_path).map_err(|_| StreamError::FileNotFound)?;
+    let _meta: VaultMeta =
+        serde_json::from_str(&meta_str).map_err(|_| StreamError::FileNotFound)?;
 
     // 4. Find the file record by file_id (hex-encoded)
     let file_id_hex = hex_encode(&req.file_id);
-    let (_id, _vault_id, _file_id, encrypted_size, _encryption_version): (u64, u64, String, u64, u32) =
-        db.conn().query_row(
+    let (_id, _vault_id, _file_id, encrypted_size, _encryption_version): (
+        u64,
+        u64,
+        String,
+        u64,
+        u32,
+    ) = db
+        .conn()
+        .query_row(
             "SELECT id, vault_id, file_id, encrypted_size, encryption_version
              FROM encrypted_files WHERE file_id = ?1",
             rusqlite::params![file_id_hex],
@@ -64,7 +74,7 @@ pub fn handle_request(
         .ok_or(StreamError::FileNotFound)?;
 
     // 5. Get total length from the file record
-    let total_length = encrypted_size as u64;
+    let total_length = encrypted_size;
 
     // 6. Map the byte range to chunk indices
     const CHUNK_SIZE: u64 = 65536;
@@ -111,7 +121,11 @@ pub fn handle_request(
         }
         let max_allowed = remaining_in_request.saturating_sub(plaintext.len());
         let to_append = &chunk_data[chunk_offset_start..chunk_offset_end.min(chunk_data.len())];
-        let bytes_to_add = to_append.iter().take(max_allowed).cloned().collect::<Vec<_>>();
+        let bytes_to_add = to_append
+            .iter()
+            .take(max_allowed)
+            .cloned()
+            .collect::<Vec<_>>();
         plaintext.extend(bytes_to_add);
 
         if plaintext.len() >= remaining_in_request {
@@ -147,7 +161,7 @@ pub fn handle_streaming_request(
     db: &Db,
     dir: &VaultDir,
     url: &str,
-    on_chunk: Option<&dyn Fn(&SessionManager, u64)>,
+    on_chunk: OnChunk<'_>,
 ) -> Result<Vec<u8>, StreamError> {
     let req = parse_url(url).map_err(|e| StreamError::UrlParse(e.to_string()))?;
     handle_request(manager, db, dir, req, on_chunk)

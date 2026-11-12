@@ -6,25 +6,25 @@
 //! They must NOT be regenerated to match a changed implementation.
 
 use veylora::crypto::hkdf::{
-    derive_subkey, LABEL_BACKUP_KEY, LABEL_METADATA_KEY, LABEL_NONCE,
-    LABEL_RECOVERY_WRAP, LABEL_VAULT_KEY,
+    derive_subkey, LABEL_BACKUP_KEY, LABEL_METADATA_KEY, LABEL_NONCE, LABEL_RECOVERY_WRAP,
+    LABEL_VAULT_KEY,
 };
-use veylora::crypto::kdf::{derive_pin_kek, derive_password_kek};
+use veylora::crypto::kdf::{derive_password_kek, derive_pin_kek};
 
 /// Argon2id-PIN vector: PIN = b"1234", fixed 32-byte salt, expected KEK.
 pub const ARGON2ID_PIN_INPUT: &[u8] = b"1234";
 pub const ARGON2ID_PIN_SALT: [u8; 32] = [0x11; 32];
 pub const ARGON2ID_PIN_EXPECTED: [u8; 32] = [
-    57, 86, 164, 18, 104, 164, 20, 193, 0, 203, 231, 68, 161, 188, 209, 200, 106, 153, 183, 197, 139,
-    66, 96, 165, 193, 101, 39, 182, 214, 43, 7, 17,
+    57, 86, 164, 18, 104, 164, 20, 193, 0, 203, 231, 68, 161, 188, 209, 200, 106, 153, 183, 197,
+    139, 66, 96, 165, 193, 101, 39, 182, 214, 43, 7, 17,
 ];
 
 /// Argon2id-Password vector: password = b"correct horse battery staple", fixed salt.
 pub const ARGON2ID_PASSWORD_INPUT: &[u8] = b"correct horse battery staple";
 pub const ARGON2ID_PASSWORD_SALT: [u8; 32] = [0x22; 32];
 pub const ARGON2ID_PASSWORD_EXPECTED: [u8; 32] = [
-    162, 196, 6, 236, 213, 247, 38, 248, 100, 184, 89, 253, 217, 80, 148, 101, 69, 168, 231, 140, 149,
-    49, 170, 147, 215, 5, 77, 186, 79, 84, 75, 220,
+    162, 196, 6, 236, 213, 247, 38, 248, 100, 184, 89, 253, 217, 80, 148, 101, 69, 168, 231, 140,
+    149, 49, 170, 147, 215, 5, 77, 186, 79, 84, 75, 220,
 ];
 
 /// HKDF vectors: fixed IKM per label, no salt, expected 32-byte subkey.
@@ -37,22 +37,60 @@ pub struct HkdfVector {
 }
 
 pub const HKDF_VECTORS: &[HkdfVector] = &[
-    HkdfVector { label: LABEL_VAULT_KEY, ikm: HKDF_IKM, expected: [25, 1, 28, 11, 99, 161, 128, 64, 255, 131, 241, 112, 218, 110, 154, 235, 38, 200, 5, 205, 61, 19, 217, 153, 74, 43, 66, 173, 14, 96, 0, 64] },
-    HkdfVector { label: LABEL_METADATA_KEY, ikm: HKDF_IKM, expected: [7, 113, 83, 206, 112, 7, 19, 89, 208, 176, 118, 20, 50, 123, 174, 82, 188, 160, 216, 67, 168, 14, 185, 225, 26, 255, 226, 7, 88, 49, 207, 239] },
-    HkdfVector { label: LABEL_RECOVERY_WRAP, ikm: HKDF_IKM, expected: [46, 77, 219, 15, 35, 123, 147, 72, 121, 176, 216, 124, 254, 115, 13, 48, 40, 113, 101, 162, 42, 8, 144, 179, 143, 238, 241, 218, 120, 6, 174, 2] },
-    HkdfVector { label: LABEL_BACKUP_KEY, ikm: HKDF_IKM, expected: [226, 230, 220, 53, 94, 54, 24, 55, 229, 74, 133, 222, 118, 13, 3, 251, 21, 0, 156, 159, 40, 82, 178, 232, 147, 162, 188, 51, 17, 202, 44, 197] },
-    HkdfVector { label: LABEL_NONCE, ikm: HKDF_IKM, expected: [163, 236, 202, 17, 162, 219, 81, 235, 173, 36, 132, 28, 217, 165, 241, 82, 63, 47, 156, 106, 85, 171, 7, 151, 17, 246, 192, 220, 154, 186, 0, 61] },
+    HkdfVector {
+        label: LABEL_VAULT_KEY,
+        ikm: HKDF_IKM,
+        expected: [
+            25, 1, 28, 11, 99, 161, 128, 64, 255, 131, 241, 112, 218, 110, 154, 235, 38, 200, 5,
+            205, 61, 19, 217, 153, 74, 43, 66, 173, 14, 96, 0, 64,
+        ],
+    },
+    HkdfVector {
+        label: LABEL_METADATA_KEY,
+        ikm: HKDF_IKM,
+        expected: [
+            7, 113, 83, 206, 112, 7, 19, 89, 208, 176, 118, 20, 50, 123, 174, 82, 188, 160, 216,
+            67, 168, 14, 185, 225, 26, 255, 226, 7, 88, 49, 207, 239,
+        ],
+    },
+    HkdfVector {
+        label: LABEL_RECOVERY_WRAP,
+        ikm: HKDF_IKM,
+        expected: [
+            46, 77, 219, 15, 35, 123, 147, 72, 121, 176, 216, 124, 254, 115, 13, 48, 40, 113, 101,
+            162, 42, 8, 144, 179, 143, 238, 241, 218, 120, 6, 174, 2,
+        ],
+    },
+    HkdfVector {
+        label: LABEL_BACKUP_KEY,
+        ikm: HKDF_IKM,
+        expected: [
+            226, 230, 220, 53, 94, 54, 24, 55, 229, 74, 133, 222, 118, 13, 3, 251, 21, 0, 156, 159,
+            40, 82, 178, 232, 147, 162, 188, 51, 17, 202, 44, 197,
+        ],
+    },
+    HkdfVector {
+        label: LABEL_NONCE,
+        ikm: HKDF_IKM,
+        expected: [
+            163, 236, 202, 17, 162, 219, 81, 235, 173, 36, 132, 28, 217, 165, 241, 82, 63, 47, 156,
+            106, 85, 171, 7, 151, 17, 246, 192, 220, 154, 186, 0, 61,
+        ],
+    },
     HkdfVector {
         label: b"veylora/v1/file-key/00112233445566778899aabbccddeeff",
         ikm: HKDF_IKM,
-        expected: [98, 93, 115, 22, 9, 235, 96, 208, 169, 246, 131, 134, 189, 59, 43, 113, 249, 216, 197, 31, 227, 203, 88, 175, 154, 135, 212, 141, 28, 99, 132, 8],
+        expected: [
+            98, 93, 115, 22, 9, 235, 96, 208, 169, 246, 131, 134, 189, 59, 43, 113, 249, 216, 197,
+            31, 227, 203, 88, 175, 154, 135, 212, 141, 28, 99, 132, 8,
+        ],
     },
 ];
 
 #[test]
 fn committed_argon2id_pin_vector_matches() {
-    let actual = derive_pin_kek(ARGON2ID_PIN_INPUT, &ARGON2ID_PIN_SALT)
-        .expect("PIN KEK derivation failed");
+    let actual =
+        derive_pin_kek(ARGON2ID_PIN_INPUT, &ARGON2ID_PIN_SALT).expect("PIN KEK derivation failed");
     assert_eq!(actual.as_bytes(), &ARGON2ID_PIN_EXPECTED);
 }
 
@@ -69,7 +107,8 @@ fn committed_hkdf_vectors_match() {
     for vec in HKDF_VECTORS {
         let actual = derive_subkey(&key, vec.label).expect("HKDF derivation failed");
         assert_eq!(
-            actual, vec.expected,
+            actual,
+            vec.expected,
             "HKDF vector for label {:?} mismatch",
             std::str::from_utf8(vec.label)
         );

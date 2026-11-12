@@ -6,17 +6,13 @@
 //!   tag          [16]
 //!   AAD          = "VYLR" || format_version_LE || file_id
 
-use chacha20poly1305::{XChaCha20Poly1305, KeyInit};
 use chacha20poly1305::aead::{Aead, Payload};
+use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use hybrid_array::Array;
 use sha2::{Digest, Sha256};
 
-use crate::crypto::hkdf::{
-    derive_subkey, LABEL_FINALIZE_NONCE,
-};
-use crate::storage::format::{
-    MAGIC, NONCE_LEN, TAG_LEN, VERSION, FormatError, FileKey, Result,
-};
+use crate::crypto::hkdf::{derive_subkey, LABEL_FINALIZE_NONCE};
+use crate::storage::format::{FileKey, FormatError, Result, MAGIC, NONCE_LEN, TAG_LEN, VERSION};
 
 /// root_hash = SHA-256 over all chunk (ciphertext || tag) pairs, in order.
 pub fn compute_root_hash(chunk_ct_tags: &[Vec<u8>]) -> [u8; 32] {
@@ -35,8 +31,8 @@ pub fn encrypt_finalize(
     total_length: u64,
     root_hash: &[u8; 32],
 ) -> Vec<u8> {
-    let cipher = XChaCha20Poly1305::new_from_slice(file_key.as_bytes())
-        .expect("aead key init cannot fail");
+    let cipher =
+        XChaCha20Poly1305::new_from_slice(file_key.as_bytes()).expect("aead key init cannot fail");
     let nonce_bytes = derive_subkey(file_key.as_bytes(), LABEL_FINALIZE_NONCE)
         .expect("finalize nonce derivation cannot fail with valid label");
     let nonce_arr: [u8; NONCE_LEN] = nonce_bytes[..NONCE_LEN]
@@ -55,7 +51,13 @@ pub fn encrypt_finalize(
     plaintext.extend_from_slice(&total_chunks.to_le_bytes());
 
     let buffer = cipher
-        .encrypt(&nonce, Payload { aad: aad.as_slice(), msg: &plaintext })
+        .encrypt(
+            &nonce,
+            Payload {
+                aad: aad.as_slice(),
+                msg: &plaintext,
+            },
+        )
         .expect("finalize encryption cannot fail");
 
     let mut out = Vec::with_capacity(NONCE_LEN + buffer.len());
@@ -82,7 +84,9 @@ pub fn decrypt_finalize(
     let nonce_bytes = &nonce_ct_tag[..NONCE_LEN];
     let ct_tag = &nonce_ct_tag[NONCE_LEN..];
 
-    let nonce_arr: [u8; NONCE_LEN] = nonce_bytes.try_into().map_err(|_| FormatError::FinalizeAuth)?;
+    let nonce_arr: [u8; NONCE_LEN] = nonce_bytes
+        .try_into()
+        .map_err(|_| FormatError::FinalizeAuth)?;
     let nonce = Array(nonce_arr);
 
     let mut aad = Vec::with_capacity(4 + 4 + 16);
@@ -91,7 +95,13 @@ pub fn decrypt_finalize(
     aad.extend_from_slice(file_id);
 
     let plaintext = cipher
-        .decrypt(&nonce, Payload { aad: aad.as_slice(), msg: ct_tag })
+        .decrypt(
+            &nonce,
+            Payload {
+                aad: aad.as_slice(),
+                msg: ct_tag,
+            },
+        )
         .map_err(|_| FormatError::FinalizeAuth)?;
 
     // Expected plaintext: root_hash(32) || total_length(8) || total_chunks(8)
@@ -122,8 +132,15 @@ mod tests {
         let root_hash = [0xabu8; 32];
 
         let enc = encrypt_finalize(&file_key, &file_id, total_chunks, total_length, &root_hash);
-        decrypt_finalize(&file_key, &file_id, total_chunks, total_length, &root_hash, &enc)
-            .expect("decrypt finalize");
+        decrypt_finalize(
+            &file_key,
+            &file_id,
+            total_chunks,
+            total_length,
+            &root_hash,
+            &enc,
+        )
+        .expect("decrypt finalize");
     }
 
     #[test]
@@ -140,7 +157,12 @@ mod tests {
         tampered[NONCE_LEN] ^= 0x01;
 
         let err = decrypt_finalize(
-            &file_key, &file_id, total_chunks, total_length, &root_hash, &tampered,
+            &file_key,
+            &file_id,
+            total_chunks,
+            total_length,
+            &root_hash,
+            &tampered,
         )
         .unwrap_err();
         assert!(matches!(err, FormatError::FinalizeAuth));

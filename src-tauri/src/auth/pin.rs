@@ -1,7 +1,7 @@
 //! PIN unlock: derive Argon2id KEK from PIN + salt, unwrap MVK from vault.meta.
 
-use crate::auth::AuthError;
 use crate::auth::session::Session;
+use crate::auth::AuthError;
 use crate::auth::UnlockMethod;
 use crate::storage::vault_dir::VaultDir;
 use crate::vault::VaultMeta;
@@ -15,12 +15,12 @@ pub fn unlock_with_pin(vault_root: &std::path::Path, pin: &[u8]) -> Result<Sessi
     let meta_path = &vdir.meta_path;
 
     // Read vault.meta
-    let meta_str = std::fs::read_to_string(meta_path)
-        .map_err(|_| AuthError::VaultNotFound)?;
-    let meta: VaultMeta = serde_json::from_str(&meta_str)
-        .map_err(|_| AuthError::VaultCorrupted)?;
+    let meta_str = std::fs::read_to_string(meta_path).map_err(|_| AuthError::VaultNotFound)?;
+    let meta: VaultMeta = serde_json::from_str(&meta_str).map_err(|_| AuthError::VaultCorrupted)?;
 
-    let mvk = meta.unwrap_with_pin(pin).map_err(|_| AuthError::InvalidCredential)?;
+    let mvk = meta
+        .unwrap_with_pin(pin)
+        .map_err(|_| AuthError::InvalidCredential)?;
 
     // Verify MVK length
     if mvk.as_bytes().len() != 32 {

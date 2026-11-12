@@ -58,8 +58,10 @@ fn check_db_integrity(db_path: &Path) -> Result<bool, CrashError> {
         return Ok(true);
     }
 
-    let conn = rusqlite::Connection::open(db_path).map_err(|e| CrashError::Database(e.to_string()))?;
-    let integrity_result = conn.query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0));
+    let conn =
+        rusqlite::Connection::open(db_path).map_err(|e| CrashError::Database(e.to_string()))?;
+    let integrity_result =
+        conn.query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0));
     match integrity_result {
         Ok(result) => {
             if result != "ok" {
@@ -80,9 +82,11 @@ mod tests {
     fn startup_scan_fresh_dir_ok() {
         static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let id = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let tmp = std::env::current_dir()
-            .unwrap()
-            .join(format!("target/debug/test-vault-crash-{}-{}", std::process::id(), id));
+        let tmp = std::env::current_dir().unwrap().join(format!(
+            "target/debug/test-vault-crash-{}-{}",
+            std::process::id(),
+            id
+        ));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
 
@@ -95,9 +99,11 @@ mod tests {
     fn startup_scan_removes_tmp_files() {
         static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let id = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let tmp = std::env::current_dir()
-            .unwrap()
-            .join(format!("target/debug/test-vault-crash-tmp-{}-{}", std::process::id(), id));
+        let tmp = std::env::current_dir().unwrap().join(format!(
+            "target/debug/test-vault-crash-tmp-{}-{}",
+            std::process::id(),
+            id
+        ));
         let _ = fs::remove_dir_all(&tmp);
         let vdir = super::VaultDir::new(tmp.clone());
         vdir.create_layout().unwrap();
@@ -113,9 +119,11 @@ mod tests {
     fn startup_scan_corrupt_db_fails() {
         static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let id = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let tmp = std::env::current_dir()
-            .unwrap()
-            .join(format!("target/debug/test-vault-crash-corrupt-{}-{}", std::process::id(), id));
+        let tmp = std::env::current_dir().unwrap().join(format!(
+            "target/debug/test-vault-crash-corrupt-{}-{}",
+            std::process::id(),
+            id
+        ));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
 

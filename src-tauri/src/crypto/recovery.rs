@@ -34,7 +34,7 @@ pub fn decode_recovery_key(s: &str) -> Result<[u8; 32]> {
     let (encoded, checksum) = s.split_at(ENCODED_LEN);
     let key = base32_decode(encoded)?;
     let mut hasher = Sha256::new();
-    hasher.update(&key);
+    hasher.update(key);
     let digest = hasher.finalize();
     let expected = format!("{:02x}{:02x}", digest[0], digest[1]);
     if expected != checksum {
@@ -44,7 +44,7 @@ pub fn decode_recovery_key(s: &str) -> Result<[u8; 32]> {
 }
 
 fn base32_encode(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity((bytes.len() * 8 + 4) / 5);
+    let mut out = String::with_capacity((bytes.len() * 8).div_ceil(5));
     let mut buffer: u32 = 0;
     let mut bits = 0;
     for &b in bytes {

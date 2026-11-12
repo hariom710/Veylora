@@ -6,12 +6,12 @@
 //! MVK wrapping for PIN/password/recovery paths, and recovery-key encoding.
 //! All key material is zeroized on drop.
 
-pub mod app_auth;  // Phase 9: Layer-1 app login (separate from vault auth)
+pub mod app_auth; // Phase 9: Layer-1 app login (separate from vault auth)
 pub mod auth;
-pub mod backup;    // Phase 7: backup/restore container
+pub mod backup; // Phase 7: backup/restore container
 pub mod commands;
 pub mod crypto;
 pub mod database;
-pub mod streaming;  // Phase 5: vault:// protocol, URL parsing, token management
 pub mod storage;
+pub mod streaming; // Phase 5: vault:// protocol, URL parsing, token management
 pub mod vault;

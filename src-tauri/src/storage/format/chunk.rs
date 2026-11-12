@@ -9,16 +9,12 @@
 //!   "VYLR" || format_version_LE || file_id ||
 //!   chunk_index_u64_LE || total_chunks_u64_LE || total_length_u64_LE
 
-use chacha20poly1305::{XChaCha20Poly1305, KeyInit};
 use chacha20poly1305::aead::{Aead, Payload};
+use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use hybrid_array::Array;
 
-use crate::crypto::hkdf::{
-    derive_subkey_info, LABEL_NONCE,
-};
-use crate::storage::format::{
-    CHUNK_SIZE, MAGIC, NONCE_LEN, VERSION, FormatError, FileKey, Result,
-};
+use crate::crypto::hkdf::{derive_subkey_info, LABEL_NONCE};
+use crate::storage::format::{FileKey, FormatError, Result, CHUNK_SIZE, MAGIC, NONCE_LEN, VERSION};
 
 /// Derive the per-chunk nonce: HKDF(file-key, "nonce", chunk_index_le_bytes) → 24 bytes.
 pub fn chunk_nonce(file_key: &FileKey, chunk_index: u64) -> [u8; NONCE_LEN] {
@@ -63,7 +59,13 @@ pub fn encrypt_chunk(
 
     let aad = chunk_aad(file_id, chunk_index, total_chunks, total_length);
     let ciphertext = cipher
-        .encrypt(&nonce, Payload { aad: aad.as_slice(), msg: plaintext })
+        .encrypt(
+            &nonce,
+            Payload {
+                aad: aad.as_slice(),
+                msg: plaintext,
+            },
+        )
         .map_err(|_| FormatError::ChunkAuth(chunk_index))?;
     Ok(ciphertext)
 }
@@ -84,7 +86,13 @@ pub fn decrypt_chunk(
 
     let aad = chunk_aad(file_id, chunk_index, total_chunks, total_length);
     let plaintext = cipher
-        .decrypt(&nonce, Payload { aad: aad.as_slice(), msg: ciphertext_and_tag })
+        .decrypt(
+            &nonce,
+            Payload {
+                aad: aad.as_slice(),
+                msg: ciphertext_and_tag,
+            },
+        )
         .map_err(|_| FormatError::ChunkAuth(chunk_index))?;
 
     Ok(plaintext)
@@ -118,13 +126,16 @@ mod tests {
         let total_length = plaintext.len() as u64;
 
         let enc = encrypt_chunk(
-            &file_key, &file_id, 0, total_chunks, total_length, plaintext,
+            &file_key,
+            &file_id,
+            0,
+            total_chunks,
+            total_length,
+            plaintext,
         )
         .expect("encrypt");
-        let dec = decrypt_chunk(
-            &file_key, &file_id, 0, total_chunks, total_length, &enc,
-        )
-        .expect("decrypt");
+        let dec = decrypt_chunk(&file_key, &file_id, 0, total_chunks, total_length, &enc)
+            .expect("decrypt");
         assert_eq!(&dec, plaintext);
     }
 
@@ -138,14 +149,24 @@ mod tests {
         let total_length = 100u64;
 
         let enc = encrypt_chunk(
-            &file_key, &file_id, 0, total_chunks, total_length, &plaintext,
+            &file_key,
+            &file_id,
+            0,
+            total_chunks,
+            total_length,
+            &plaintext,
         )
         .expect("encrypt");
         let mut tampered = enc.clone();
         tampered[NONCE_LEN] ^= 0x01; // flip a ciphertext byte
 
         let err = decrypt_chunk(
-            &file_key, &file_id, 0, total_chunks, total_length, &tampered,
+            &file_key,
+            &file_id,
+            0,
+            total_chunks,
+            total_length,
+            &tampered,
         )
         .unwrap_err();
         assert!(matches!(err, FormatError::ChunkAuth(0)));
@@ -161,14 +182,17 @@ mod tests {
         let total_length = 100u64;
 
         let enc = encrypt_chunk(
-            &file_key, &file_id, 0, total_chunks, total_length, &plaintext,
+            &file_key,
+            &file_id,
+            0,
+            total_chunks,
+            total_length,
+            &plaintext,
         )
         .expect("encrypt");
         // decrypt with wrong chunk index -> different nonce/AAD -> auth fail
-        let err = decrypt_chunk(
-            &file_key, &file_id, 1, total_chunks, total_length, &enc,
-        )
-        .unwrap_err();
+        let err =
+            decrypt_chunk(&file_key, &file_id, 1, total_chunks, total_length, &enc).unwrap_err();
         assert!(matches!(err, FormatError::ChunkAuth(1)));
     }
 }

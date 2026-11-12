@@ -2,29 +2,27 @@
 //! Tests that handle_protocol_request returns correct bytes for known files.
 
 use std::time::{SystemTime, UNIX_EPOCH};
+use veylora::auth::session::Session;
 use veylora::auth::session::SessionManager;
 use veylora::auth::UnlockMethod;
-use veylora::auth::session::Session;
 use veylora::crypto::hkdf::LABEL_METADATA_KEY;
 use veylora::crypto::mvk::Mvk;
 use veylora::crypto::recovery::generate_recovery_key;
 use veylora::database::Db;
-use veylora::streaming::protocol::handle_protocol_request;
 use veylora::storage::vault_dir::VaultDir;
-use veylora::vault::VaultMeta;
 use veylora::streaming::hex_encode;
+use veylora::streaming::protocol::handle_protocol_request;
+use veylora::vault::VaultMeta;
 
 fn setup_vault_dir() -> std::path::PathBuf {
-    let tmp = std::env::current_dir()
-        .unwrap()
-        .join(format!(
-            "target/debug/test-phase6-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()
-        ));
+    let tmp = std::env::current_dir().unwrap().join(format!(
+        "target/debug/test-phase6-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
     tmp
@@ -34,9 +32,8 @@ fn create_test_vault(tmp_dir: &std::path::Path) -> (Db, Mvk, [u8; 32], VaultDir)
     let mvk = Mvk::generate().expect("MVK generation failed");
     let mvk_bytes = *mvk.as_bytes();
     let recovery_key = generate_recovery_key();
-    let _metadata_key =
-        veylora::crypto::hkdf::derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY)
-            .expect("metadata key derivation failed");
+    let _metadata_key = veylora::crypto::hkdf::derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY)
+        .expect("metadata key derivation failed");
 
     let vdir = VaultDir::new(tmp_dir.to_path_buf());
     vdir.create_layout().expect("create vault dir layout");
@@ -59,9 +56,8 @@ fn create_test_vault(tmp_dir: &std::path::Path) -> (Db, Mvk, [u8; 32], VaultDir)
 }
 
 fn create_test_file(db: &Db, mvk: &[u8; 32], plaintext: &[u8], filename: &str) -> String {
-    let metadata_key =
-        veylora::crypto::hkdf::derive_subkey(mvk, LABEL_METADATA_KEY)
-            .expect("metadata key derivation failed");
+    let metadata_key = veylora::crypto::hkdf::derive_subkey(mvk, LABEL_METADATA_KEY)
+        .expect("metadata key derivation failed");
 
     let file_id_bytes = *Mvk::generate().expect("MVK generation").as_bytes();
     let file_id_hex = hex_encode(&file_id_bytes);
@@ -80,7 +76,7 @@ fn create_test_file(db: &Db, mvk: &[u8; 32], plaintext: &[u8], filename: &str) -
     file_id_hex
 }
 
-fn unlock_vault(db: &Db, mvk: &Mvk, vdir: &VaultDir) -> (SessionManager, String) {
+fn unlock_vault(_db: &Db, mvk: &Mvk, vdir: &VaultDir) -> (SessionManager, String) {
     let manager = SessionManager::new();
     let session = Session::new(mvk.clone(), 1, UnlockMethod::Pin);
     manager.set_session(session, vdir.meta_path.to_string_lossy().to_string());
@@ -110,7 +106,9 @@ fn phase6_protocol_handler_serves_file_bytes() {
 
     let url = format!(
         "vault://file/{}?token={}&range=0-{}",
-        file_id_hex, token, plaintext.len() - 1
+        file_id_hex,
+        token,
+        plaintext.len() - 1
     );
 
     let request = tauri::http::Request::builder()
@@ -137,10 +135,7 @@ fn phase6_protocol_handler_range_request() {
 
     let (manager, token) = unlock_vault(&db, &mvk, &vdir);
 
-    let url = format!(
-        "vault://file/{}?token={}&range=4-8",
-        file_id_hex, token
-    );
+    let url = format!("vault://file/{}?token={}&range=4-8", file_id_hex, token);
 
     let request = tauri::http::Request::builder()
         .uri(url)
@@ -159,17 +154,14 @@ fn phase6_protocol_handler_range_request() {
 #[test]
 fn phase6_protocol_handler_locked_session_rejects() {
     let tmp_dir = setup_vault_dir();
-    let (db, mvk, mvk_bytes, vdir) = create_test_vault(&tmp_dir);
+    let (db, _mvk, mvk_bytes, vdir) = create_test_vault(&tmp_dir);
 
     let plaintext = b"secret data";
     let file_id_hex = create_test_file(&db, &mvk_bytes, plaintext, "test.txt");
 
     let manager = SessionManager::new(); // locked by default
 
-    let url = format!(
-        "vault://file/{}?token=wrongtoken&range=0-10",
-        file_id_hex
-    );
+    let url = format!("vault://file/{}?token=wrongtoken&range=0-10", file_id_hex);
 
     let request = tauri::http::Request::builder()
         .uri(url)
@@ -179,13 +171,17 @@ fn phase6_protocol_handler_locked_session_rejects() {
     let response = handle_protocol_request(&manager, &db, &vdir, request);
 
     assert_eq!(response.status(), 403);
-    assert_eq!(response.body().len(), 0, "locked session should return empty body");
+    assert_eq!(
+        response.body().len(),
+        0,
+        "locked session should return empty body"
+    );
 }
 
 #[test]
 fn phase6_protocol_handler_unknown_file_id() {
     let tmp_dir = setup_vault_dir();
-    let (db, mvk, mvk_bytes, vdir) = create_test_vault(&tmp_dir);
+    let (db, mvk, _mvk_bytes, vdir) = create_test_vault(&tmp_dir);
 
     let (manager, token) = unlock_vault(&db, &mvk, &vdir);
 
@@ -216,7 +212,9 @@ fn phase6_protocol_handler_mid_stream_lock_aborts() {
 
     let url = format!(
         "vault://file/{}?token={}&range=0-{}",
-        file_id_hex, token, plaintext.len() - 1
+        file_id_hex,
+        token,
+        plaintext.len() - 1
     );
 
     let request = tauri::http::Request::builder()
@@ -230,7 +228,11 @@ fn phase6_protocol_handler_mid_stream_lock_aborts() {
     let response = handle_protocol_request(&manager, &db, &vdir, request);
 
     assert_eq!(response.status(), 403);
-    assert_eq!(response.body().len(), 0, "mid-stream lock should return empty body");
+    assert_eq!(
+        response.body().len(),
+        0,
+        "mid-stream lock should return empty body"
+    );
 }
 
 /// End-to-end: lock invalidates token, unlock rotates it.
@@ -252,14 +254,20 @@ fn phase6_e2e_lock_invalidates_token_unlock_rotates() {
 
     let url = format!(
         "vault://file/{}?token={}&range=0-{}",
-        file_id_hex, token1, plaintext.len() - 1
+        file_id_hex,
+        token1,
+        plaintext.len() - 1
     );
     let request = tauri::http::Request::builder()
         .uri(url.clone())
         .body(Vec::new())
         .unwrap();
     let response = handle_protocol_request(&manager, &db, &vdir, request);
-    assert_eq!(response.status(), 200, "first fetch should succeed with token1");
+    assert_eq!(
+        response.status(),
+        200,
+        "first fetch should succeed with token1"
+    );
     let expected = expected_chunk_data(0, 0, (plaintext.len() - 1) as u64);
     assert_eq!(
         response.body(),
@@ -288,19 +296,28 @@ fn phase6_e2e_lock_invalidates_token_unlock_rotates() {
     manager.set_session(session, vdir.meta_path.to_string_lossy().to_string());
     let token2 = manager.token();
     assert_ne!(token1, token2, "token should rotate on unlock");
-    assert!(!manager.is_locked(), "vault should be unlocked after set_session");
+    assert!(
+        !manager.is_locked(),
+        "vault should be unlocked after set_session"
+    );
 
     // Fetch with token2 -> 200
     let url2 = format!(
         "vault://file/{}?token={}&range=0-{}",
-        file_id_hex, token2, plaintext.len() - 1
+        file_id_hex,
+        token2,
+        plaintext.len() - 1
     );
     let request3 = tauri::http::Request::builder()
         .uri(url2)
         .body(Vec::new())
         .unwrap();
     let response3 = handle_protocol_request(&manager, &db, &vdir, request3);
-    assert_eq!(response3.status(), 200, "second fetch should succeed with token2");
+    assert_eq!(
+        response3.status(),
+        200,
+        "second fetch should succeed with token2"
+    );
     assert_eq!(
         response3.body(),
         &expected,

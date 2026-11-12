@@ -5,9 +5,9 @@
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::crypto::CryptoError;
 use crate::crypto::hkdf::{derive_subkey, LABEL_FILE_KEY_PREFIX};
 use crate::crypto::mvk::Mvk;
+use crate::crypto::CryptoError;
 use thiserror::Error;
 
 pub mod chunk;

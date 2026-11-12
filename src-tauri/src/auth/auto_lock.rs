@@ -3,11 +3,11 @@
 //!
 //! No tokio/async runtime — pure std::thread.
 
+use crate::auth::session::SessionManager;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
-use crate::auth::session::SessionManager;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Idle timeout in seconds, adjustable at runtime from Settings → Security.
 /// 0 disables auto-lock. Defaults to 5 minutes (300s), per the UI spec.
@@ -30,18 +30,16 @@ pub fn timeout_secs() -> u64 {
 /// tick, so Settings changes apply without a restart.
 pub fn spawn_watcher(manager: Arc<SessionManager>) -> thread::JoinHandle<()> {
     let manager = Arc::clone(&manager);
-    thread::spawn(move || {
-        loop {
-            thread::sleep(Duration::from_secs(30));
-            let timeout = timeout_secs();
-            if timeout == 0 {
-                continue;
-            }
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-            manager.check_auto_lock(now, timeout);
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_secs(30));
+        let timeout = timeout_secs();
+        if timeout == 0 {
+            continue;
         }
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        manager.check_auto_lock(now, timeout);
     })
 }

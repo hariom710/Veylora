@@ -14,14 +14,14 @@
 //! Header core (encrypted)   = file_id || chunk_size || total_chunks || total_length
 //! Header AAD (authenticated) = "VYLR" || format_version_LE
 
-use chacha20poly1305::{XChaCha20Poly1305, KeyInit};
 use chacha20poly1305::aead::{Aead, Payload};
+use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use hybrid_array::Array;
 use typenum::U24;
 
 use crate::crypto::hkdf::derive_subkey;
 use crate::storage::format::{
-    CHUNK_SIZE, HEADER_CORE_LEN, MAGIC, NONCE_LEN, TAG_LEN, VERSION, FormatError, FileKey, Result,
+    FileKey, FormatError, Result, CHUNK_SIZE, HEADER_CORE_LEN, MAGIC, NONCE_LEN, TAG_LEN, VERSION,
 };
 
 pub(crate) const HEADER_FIXED_LEN: usize = 4 + 4 + 16 + 4 + 8 + 8; // before nonce
@@ -88,20 +88,30 @@ pub fn write_header(
 
     let nonce_bytes = derive_subkey(file_key.as_bytes(), crate::crypto::hkdf::LABEL_HEADER_NONCE)?;
     let mut nonce = AeadNonce::default();
-    nonce.as_mut_slice().copy_from_slice(&nonce_bytes[..NONCE_LEN]);
+    nonce
+        .as_mut_slice()
+        .copy_from_slice(&nonce_bytes[..NONCE_LEN]);
 
     let core = header.core_bytes();
 
     let aad = header.aad();
     let ciphertext = cipher
-        .encrypt(&nonce, Payload { aad: aad.as_slice(), msg: &core })
+        .encrypt(
+            &nonce,
+            Payload {
+                aad: aad.as_slice(),
+                msg: &core,
+            },
+        )
         .map_err(|_| FormatError::HeaderAuth)?;
 
     let fixed = header.fixed_bytes();
-    dest.write_all(&fixed).map_err(|e| FormatError::Io(e.to_string()))?;
+    dest.write_all(&fixed)
+        .map_err(|e| FormatError::Io(e.to_string()))?;
     dest.write_all(&nonce_bytes[..NONCE_LEN])
         .map_err(|e| FormatError::Io(e.to_string()))?;
-    dest.write_all(&ciphertext).map_err(|e| FormatError::Io(e.to_string()))?;
+    dest.write_all(&ciphertext)
+        .map_err(|e| FormatError::Io(e.to_string()))?;
 
     Ok(fixed.len() + NONCE_LEN + ciphertext.len())
 }
@@ -143,7 +153,13 @@ pub fn read_header(file: &[u8], file_key: &FileKey) -> Result<(Header, usize)> {
         a
     };
     let plaintext = cipher
-        .decrypt(&nonce, Payload { aad: aad.as_slice(), msg: header_ct })
+        .decrypt(
+            &nonce,
+            Payload {
+                aad: aad.as_slice(),
+                msg: header_ct,
+            },
+        )
         .map_err(|_| FormatError::HeaderAuth)?;
 
     if plaintext.len() != HEADER_CORE_LEN {

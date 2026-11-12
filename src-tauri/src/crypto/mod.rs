@@ -7,8 +7,8 @@ pub mod recovery;
 pub mod wrap;
 
 pub use hkdf::{
-    derive_subkey, LABEL_BACKUP_KEY, LABEL_FILE_KEY_PREFIX, LABEL_METADATA_KEY,
-    LABEL_NONCE, LABEL_RECOVERY_WRAP, LABEL_VAULT_KEY,
+    derive_subkey, LABEL_BACKUP_KEY, LABEL_FILE_KEY_PREFIX, LABEL_METADATA_KEY, LABEL_NONCE,
+    LABEL_RECOVERY_WRAP, LABEL_VAULT_KEY,
 };
 pub use kdf::{derive_password_kek, derive_pin_kek};
 pub use mvk::{Mvk, SecretKey};

@@ -3,9 +3,9 @@
 // shortcut. Debug keeps the console so tauri dev logs stay visible.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::sync::Arc;
 use tauri::generate_context;
 use tauri::Manager;
-use std::sync::Arc;
 
 use veylora::auth::session::SessionManager;
 
@@ -17,16 +17,12 @@ fn vault_status_cmd(
 }
 
 #[tauri::command]
-fn vault_lock_cmd(
-    state: tauri::State<'_, Arc<SessionManager>>,
-) -> Result<(), String> {
+fn vault_lock_cmd(state: tauri::State<'_, Arc<SessionManager>>) -> Result<(), String> {
     veylora::commands::vault_lock(state.inner().clone())
 }
 
 #[tauri::command]
-fn vault_get_meta_cmd(
-    path: String,
-) -> Result<veylora::commands::VaultPublicMeta, String> {
+fn vault_get_meta_cmd(path: String) -> Result<veylora::commands::VaultPublicMeta, String> {
     veylora::commands::vault_get_meta(path)
 }
 
@@ -139,9 +135,7 @@ fn app_signup_cmd(
 }
 
 #[tauri::command]
-fn app_logout_cmd(
-    state: tauri::State<'_, Arc<veylora::app_auth::AppAuth>>,
-) -> Result<(), String> {
+fn app_logout_cmd(state: tauri::State<'_, Arc<veylora::app_auth::AppAuth>>) -> Result<(), String> {
     state.logout();
     Ok(())
 }
@@ -209,10 +203,7 @@ fn file_export_cmd(
 }
 
 #[tauri::command]
-fn file_delete_cmd(
-    id: u64,
-    state: tauri::State<'_, Arc<SessionManager>>,
-) -> Result<(), String> {
+fn file_delete_cmd(id: u64, state: tauri::State<'_, Arc<SessionManager>>) -> Result<(), String> {
     veylora::commands::files::file_delete(id, state.inner().clone())
 }
 
@@ -311,11 +302,7 @@ fn vault_change_password_cmd(
     new_password: String,
     state: tauri::State<'_, Arc<SessionManager>>,
 ) -> Result<(), String> {
-    veylora::commands::vault_change_password(
-        current_password,
-        new_password,
-        state.inner().clone(),
-    )
+    veylora::commands::vault_change_password(current_password, new_password, state.inner().clone())
 }
 
 #[tauri::command]
@@ -394,10 +381,9 @@ fn main() {
             // The app window is cross-origin to http://vault.localhost; without
             // ACAO the browser hides decrypted bytes from JS fetch (PDF/preview).
             if let Some(origin) = origin {
-                response.headers_mut().insert(
-                    tauri::http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
-                    origin,
-                );
+                response
+                    .headers_mut()
+                    .insert(tauri::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
             }
             response
         })

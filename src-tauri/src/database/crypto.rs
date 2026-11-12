@@ -6,8 +6,8 @@
 //!
 //! No new HKDF labels needed — nonces are random, not derived.
 
-use chacha20poly1305::{XChaCha20Poly1305, KeyInit};
 use chacha20poly1305::aead::{Aead, Payload};
+use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use hybrid_array::Array;
 use std::result::Result as StdResult;
 
@@ -31,7 +31,13 @@ pub fn encrypt_meta(
 
     let aad = build_aad(table, row_id, column);
     let ciphertext = cipher
-        .encrypt(&nonce, Payload { aad: aad.as_slice(), msg: plaintext })
+        .encrypt(
+            &nonce,
+            Payload {
+                aad: aad.as_slice(),
+                msg: plaintext,
+            },
+        )
         .map_err(|_| MetadataCryptoError::Encrypt)?;
 
     Ok((nonce_bytes, ciphertext))
@@ -52,7 +58,13 @@ pub fn decrypt_meta(
 
     let aad = build_aad(table, row_id, column);
     let plaintext = cipher
-        .decrypt(&nonce, Payload { aad: aad.as_slice(), msg: ciphertext })
+        .decrypt(
+            &nonce,
+            Payload {
+                aad: aad.as_slice(),
+                msg: ciphertext,
+            },
+        )
         .map_err(|_| MetadataCryptoError::Decrypt)?;
 
     Ok(plaintext)
@@ -88,8 +100,8 @@ mod tests {
     fn encrypt_decrypt_meta_roundtrip() {
         let key = [0x42u8; 32];
         let plaintext = b"secret filename.pdf";
-        let (nonce, ciphertext) = encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext)
-            .expect("encrypt");
+        let (nonce, ciphertext) =
+            encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext).expect("encrypt");
         let decrypted = decrypt_meta(&key, "encrypted_files", 1, "filename", &nonce, &ciphertext)
             .expect("decrypt");
         assert_eq!(decrypted, plaintext);
@@ -99,10 +111,10 @@ mod tests {
     fn encrypt_meta_twice_different_ciphertext() {
         let key = [0x42u8; 32];
         let plaintext = b"same plaintext";
-        let (n1, c1) = encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext)
-            .expect("encrypt 1");
-        let (n2, c2) = encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext)
-            .expect("encrypt 2");
+        let (n1, c1) =
+            encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext).expect("encrypt 1");
+        let (n2, c2) =
+            encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext).expect("encrypt 2");
         assert_ne!(n1, n2, "nonces should differ");
         assert_ne!(c1, c2, "ciphertexts should differ");
     }
@@ -111,10 +123,10 @@ mod tests {
     fn decrypt_meta_same_plaintext() {
         let key = [0x42u8; 32];
         let plaintext = b"same plaintext";
-        let (n1, c1) = encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext)
-            .expect("encrypt 1");
-        let (n2, c2) = encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext)
-            .expect("encrypt 2");
+        let (n1, c1) =
+            encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext).expect("encrypt 1");
+        let (n2, c2) =
+            encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext).expect("encrypt 2");
         let d1 = decrypt_meta(&key, "encrypted_files", 1, "filename", &n1, &c1).expect("decrypt 1");
         let d2 = decrypt_meta(&key, "encrypted_files", 1, "filename", &n2, &c2).expect("decrypt 2");
         assert_eq!(d1, plaintext);
@@ -125,10 +137,17 @@ mod tests {
     fn decrypt_meta_tampered_row_id_fails() {
         let key = [0x42u8; 32];
         let plaintext = b"secret";
-        let (nonce, ciphertext) = encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext)
-            .expect("encrypt");
-        let err = decrypt_meta(&key, "encrypted_files", 999, "filename", &nonce, &ciphertext)
-            .unwrap_err();
+        let (nonce, ciphertext) =
+            encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext).expect("encrypt");
+        let err = decrypt_meta(
+            &key,
+            "encrypted_files",
+            999,
+            "filename",
+            &nonce,
+            &ciphertext,
+        )
+        .unwrap_err();
         assert!(matches!(err, MetadataCryptoError::Decrypt));
     }
 
@@ -137,10 +156,10 @@ mod tests {
         let key1 = [0x42u8; 32];
         let key2 = [0x43u8; 32];
         let plaintext = b"secret";
-        let (nonce, ciphertext) = encrypt_meta(&key1, "encrypted_files", 1, "filename", plaintext)
-            .expect("encrypt");
-        let err = decrypt_meta(&key2, "encrypted_files", 1, "filename", &nonce, &ciphertext)
-            .unwrap_err();
+        let (nonce, ciphertext) =
+            encrypt_meta(&key1, "encrypted_files", 1, "filename", plaintext).expect("encrypt");
+        let err =
+            decrypt_meta(&key2, "encrypted_files", 1, "filename", &nonce, &ciphertext).unwrap_err();
         assert!(matches!(err, MetadataCryptoError::Decrypt));
     }
 
@@ -148,10 +167,17 @@ mod tests {
     fn decrypt_meta_tampered_column_fails() {
         let key = [0x42u8; 32];
         let plaintext = b"secret";
-        let (nonce, ciphertext) = encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext)
-            .expect("encrypt");
-        let err = decrypt_meta(&key, "encrypted_files", 1, "folder_name", &nonce, &ciphertext)
-            .unwrap_err();
+        let (nonce, ciphertext) =
+            encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext).expect("encrypt");
+        let err = decrypt_meta(
+            &key,
+            "encrypted_files",
+            1,
+            "folder_name",
+            &nonce,
+            &ciphertext,
+        )
+        .unwrap_err();
         assert!(matches!(err, MetadataCryptoError::Decrypt));
     }
 
@@ -159,11 +185,11 @@ mod tests {
     fn decrypt_meta_tampered_ciphertext_fails() {
         let key = [0x42u8; 32];
         let plaintext = b"secret";
-        let (nonce, mut ciphertext) = encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext)
-            .expect("encrypt");
+        let (nonce, mut ciphertext) =
+            encrypt_meta(&key, "encrypted_files", 1, "filename", plaintext).expect("encrypt");
         ciphertext[0] ^= 0x01;
-        let err = decrypt_meta(&key, "encrypted_files", 1, "filename", &nonce, &ciphertext)
-            .unwrap_err();
+        let err =
+            decrypt_meta(&key, "encrypted_files", 1, "filename", &nonce, &ciphertext).unwrap_err();
         assert!(matches!(err, MetadataCryptoError::Decrypt));
     }
 }

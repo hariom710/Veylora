@@ -5,13 +5,13 @@
  * zeroizing buffer; request handlers borrow it via with_mvk() closures.
  */
 
-pub mod url;
-pub mod token;
 pub mod handler;
 pub mod protocol;
+pub mod token;
+pub mod url;
 
-pub use url::parse_url;
 pub use handler::handle_streaming_request;
+pub use url::parse_url;
 
 /// Errors that can occur during streaming request handling.
 #[derive(Debug, thiserror::Error)]

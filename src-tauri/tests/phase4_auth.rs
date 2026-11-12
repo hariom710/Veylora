@@ -3,13 +3,13 @@
 //! Covers: vault create/unlock/lock, Argon2id PIN/password/recovery unlock,
 //! attempt throttling, auto-lock, IPC boundary enforcement, MVK zeroization.
 
-use std::time::{SystemTime, UNIX_EPOCH, Instant};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use veylora::auth::password::unlock_with_password;
+use veylora::auth::pin::unlock_with_pin;
+use veylora::auth::recovery::unlock_with_recovery;
 use veylora::auth::session::SessionManager;
 use veylora::auth::throttle;
 use veylora::auth::AuthError;
-use veylora::auth::pin::unlock_with_pin;
-use veylora::auth::password::unlock_with_password;
-use veylora::auth::recovery::unlock_with_recovery;
 use veylora::crypto::hkdf::LABEL_METADATA_KEY;
 use veylora::crypto::mvk::Mvk;
 use veylora::crypto::recovery::generate_recovery_key;
@@ -25,16 +25,14 @@ fn now_unix() -> u64 {
 }
 
 fn setup_vault_dir() -> std::path::PathBuf {
-    let tmp = std::env::current_dir()
-        .unwrap()
-        .join(format!(
-            "target/debug/test-phase4-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()
-        ));
+    let tmp = std::env::current_dir().unwrap().join(format!(
+        "target/debug/test-phase4-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
     tmp
@@ -46,9 +44,8 @@ fn create_test_vault(tmp_dir: &std::path::Path) -> (Db, [u8; 32], [u8; 32]) {
     let mvk = Mvk::generate().expect("MVK generation failed");
     let mvk_bytes = *mvk.as_bytes();
     let recovery_key = generate_recovery_key();
-    let _metadata_key =
-        veylora::crypto::hkdf::derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY)
-            .expect("metadata key derivation failed");
+    let _metadata_key = veylora::crypto::hkdf::derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY)
+        .expect("metadata key derivation failed");
 
     let vdir = VaultDir::new(tmp_dir.to_path_buf());
     vdir.create_layout().expect("create vault dir layout");
@@ -75,20 +72,24 @@ fn create_test_vault(tmp_dir: &std::path::Path) -> (Db, [u8; 32], [u8; 32]) {
 #[test]
 fn phase4_vault_create_unlock_pin_roundtrip() {
     let tmp = setup_vault_dir();
-    let (db, mvk_bytes, _recovery_key) = create_test_vault(&tmp);
+    let (db, _mvk_bytes, _recovery_key) = create_test_vault(&tmp);
 
     // Unlock with PIN
-    let session = unlock_with_pin(&tmp, b"1234")
-        .expect("PIN unlock should succeed");
+    let session = unlock_with_pin(&tmp, b"1234").expect("PIN unlock should succeed");
 
     // Verify MVK is present in session
-    session.with_mvk(|mvk_bytes| {
-        assert_eq!(mvk_bytes, mvk_bytes, "MVK should match original");
-    }).expect("with_mvk should succeed");
+    session
+        .with_mvk(|mvk_bytes| {
+            assert_eq!(mvk_bytes, mvk_bytes, "MVK should match original");
+        })
+        .expect("with_mvk should succeed");
 
     // Verify attempt counter was cleared on successful unlock
     let count = throttle::failed_count(&db, 1);
-    assert_eq!(count, 0, "attempt counter should be cleared on successful unlock");
+    assert_eq!(
+        count, 0,
+        "attempt counter should be cleared on successful unlock"
+    );
 }
 
 #[test]
@@ -99,12 +100,17 @@ fn phase4_vault_unlock_password_roundtrip() {
     let session = unlock_with_password(&tmp, b"correct horse battery staple")
         .expect("password unlock should succeed");
 
-    session.with_mvk(|m| {
-        assert_eq!(m, &mvk_bytes, "MVK should match original");
-    }).expect("with_mvk should succeed");
+    session
+        .with_mvk(|m| {
+            assert_eq!(m, &mvk_bytes, "MVK should match original");
+        })
+        .expect("with_mvk should succeed");
 
     let count = throttle::failed_count(&db, 1);
-    assert_eq!(count, 0, "attempt counter should be cleared on successful unlock");
+    assert_eq!(
+        count, 0,
+        "attempt counter should be cleared on successful unlock"
+    );
 }
 
 #[test]
@@ -112,15 +118,20 @@ fn phase4_vault_unlock_recovery_roundtrip() {
     let tmp = setup_vault_dir();
     let (db, mvk_bytes, recovery_key) = create_test_vault(&tmp);
 
-    let session = unlock_with_recovery(&tmp, &recovery_key)
-        .expect("recovery unlock should succeed");
+    let session =
+        unlock_with_recovery(&tmp, &recovery_key).expect("recovery unlock should succeed");
 
-    session.with_mvk(|m| {
-        assert_eq!(m, &mvk_bytes, "MVK should match original");
-    }).expect("with_mvk should succeed");
+    session
+        .with_mvk(|m| {
+            assert_eq!(m, &mvk_bytes, "MVK should match original");
+        })
+        .expect("with_mvk should succeed");
 
     let count = throttle::failed_count(&db, 1);
-    assert_eq!(count, 0, "attempt counter should be cleared on successful unlock");
+    assert_eq!(
+        count, 0,
+        "attempt counter should be cleared on successful unlock"
+    );
 }
 
 #[test]
@@ -131,9 +142,11 @@ fn phase4_vault_lock_zeroizes_mvk() {
     let session = SessionManager::new();
 
     // First unlock
-    let unlock_session = unlock_with_pin(&tmp, b"1234")
-        .expect("PIN unlock should succeed");
-    session.set_session(unlock_session, tmp.join("vault.meta").to_string_lossy().to_string());
+    let unlock_session = unlock_with_pin(&tmp, b"1234").expect("PIN unlock should succeed");
+    session.set_session(
+        unlock_session,
+        tmp.join("vault.meta").to_string_lossy().to_string(),
+    );
 
     assert!(!session.is_locked(), "session should be unlocked");
 
@@ -148,11 +161,15 @@ fn phase4_vault_lock_zeroizes_mvk() {
     let err = session.with_mvk(|_| ()).unwrap_err();
     assert!(
         matches!(err, veylora::auth::session::SessionError::Locked),
-        "with_mvk should fail after lock, got {:?}", err
+        "with_mvk should fail after lock, got {:?}",
+        err
     );
 
     // The captured MVK bytes should match the original (proving we read them before lock)
-    assert_eq!(mvk_bytes_before, mvk_bytes, "captured MVK should match original");
+    assert_eq!(
+        mvk_bytes_before, mvk_bytes,
+        "captured MVK should match original"
+    );
 }
 
 #[test]
@@ -170,7 +187,10 @@ fn phase4_auto_lock_short_timeout() {
     let now = now_unix();
     session.check_auto_lock(now + 200, 100); // 200ms > 100ms timeout
 
-    assert!(session.is_locked(), "session should be locked after auto-lock timeout");
+    assert!(
+        session.is_locked(),
+        "session should be locked after auto-lock timeout"
+    );
 }
 
 #[test]
@@ -190,7 +210,10 @@ fn phase4_activity_resets_timeout() {
     let now = now_unix();
     session.check_auto_lock(now + 50, 100); // 50ms < 100ms timeout
 
-    assert!(!session.is_locked(), "session should still be unlocked after activity");
+    assert!(
+        !session.is_locked(),
+        "session should still be unlocked after activity"
+    );
 }
 
 #[test]
@@ -201,18 +224,24 @@ fn phase4_successful_unlock_clears_attempts() {
     // Record some failed attempts first
     throttle::record_failure(&db, 1);
     throttle::record_failure(&db, 1);
-    assert_eq!(throttle::failed_count(&db, 1), 2, "should have 2 failed attempts");
+    assert_eq!(
+        throttle::failed_count(&db, 1),
+        2,
+        "should have 2 failed attempts"
+    );
 
     // Now unlock successfully (which clears attempts)
-    let session = unlock_with_pin(&tmp, b"1234")
-        .expect("PIN unlock should succeed");
+    let session = unlock_with_pin(&tmp, b"1234").expect("PIN unlock should succeed");
     let _ = session; // session is used for side effect of clearing attempts
 
     // Clear attempts on successful unlock (as done in IPC command handler)
     throttle::clear_attempts(&db, 1);
 
     let count = throttle::failed_count(&db, 1);
-    assert_eq!(count, 0, "attempt counter should be cleared on successful unlock");
+    assert_eq!(
+        count, 0,
+        "attempt counter should be cleared on successful unlock"
+    );
 }
 
 #[test]
@@ -225,7 +254,8 @@ fn phase4_attempt_throttling_wrong_pin() {
         let err = unlock_with_pin(&tmp, b"wrongpin").unwrap_err();
         assert!(
             matches!(err, AuthError::InvalidCredential),
-            "wrong PIN should return InvalidCredential, got {:?}", err
+            "wrong PIN should return InvalidCredential, got {:?}",
+            err
         );
         // Record failure (as done in IPC command handler)
         throttle::record_failure(&db, 1);
@@ -286,11 +316,11 @@ fn phase4_wrong_password() {
     let tmp = setup_vault_dir();
     let (_db, _mvk_bytes, _recovery_key) = create_test_vault(&tmp);
 
-    let err = unlock_with_password(&tmp, b"wrongpassword")
-        .unwrap_err();
+    let err = unlock_with_password(&tmp, b"wrongpassword").unwrap_err();
     assert!(
         matches!(err, AuthError::InvalidCredential),
-        "wrong password should return InvalidCredential, got {:?}", err
+        "wrong password should return InvalidCredential, got {:?}",
+        err
     );
 }
 
@@ -300,11 +330,11 @@ fn phase4_wrong_recovery_key() {
     let (_db, _mvk_bytes, _recovery_key) = create_test_vault(&tmp);
 
     let wrong_key = [0xFFu8; 32];
-    let err = unlock_with_recovery(&tmp, &wrong_key)
-        .unwrap_err();
+    let err = unlock_with_recovery(&tmp, &wrong_key).unwrap_err();
     assert!(
         matches!(err, AuthError::InvalidCredential),
-        "wrong recovery key should return InvalidCredential, got {:?}", err
+        "wrong recovery key should return InvalidCredential, got {:?}",
+        err
     );
 }
 
@@ -327,12 +357,9 @@ fn phase4_unlock_on_locked_out_vault() {
     );
 
     // Verify lockout is in the future
+    let _lockout = throttle::check_locked(&db, 1).unwrap();
     let lockout = throttle::check_locked(&db, 1).unwrap();
-    let lockout = throttle::check_locked(&db, 1).unwrap();
-    assert!(
-        lockout > Instant::now(),
-        "lockout should be in the future"
-    );
+    assert!(lockout > Instant::now(), "lockout should be in the future");
 }
 
 #[test]
@@ -354,7 +381,8 @@ fn phase4_unlock_pin_with_no_vault_meta() {
     let err = unlock_with_pin(&tmp, b"1234").unwrap_err();
     assert!(
         matches!(err, AuthError::VaultNotFound),
-        "missing vault.meta should return VaultNotFound, got {:?}", err
+        "missing vault.meta should return VaultNotFound, got {:?}",
+        err
     );
 }
 
@@ -372,7 +400,8 @@ fn phase4_tampered_vault_meta() {
     let err = unlock_with_pin(&tmp, b"1234").unwrap_err();
     assert!(
         matches!(err, AuthError::VaultCorrupted),
-        "tampered vault.meta should return VaultCorrupted, got {:?}", err
+        "tampered vault.meta should return VaultCorrupted, got {:?}",
+        err
     );
 }
 
@@ -380,8 +409,8 @@ fn phase4_tampered_vault_meta() {
 fn phase4_ipc_boundary_no_key_material() {
     // Source-scan test: verify no command function signature contains
     // key material terms (Mvk, Kek, Key, Ciphertext, Nonce) as type names
-    let commands_src = std::fs::read_to_string("src/commands/mod.rs")
-        .expect("read commands/mod.rs");
+    let commands_src =
+        std::fs::read_to_string("src/commands/mod.rs").expect("read commands/mod.rs");
 
     // Check each #[tauri::command] function signature for forbidden type names
     let forbidden = ["Mvk", "Kek", "Key", "Ciphertext", "Nonce"];
@@ -439,8 +468,6 @@ fn phase4_windows_session_lock_deferred() {
     //
     // This is deferred because it requires Windows-specific API calls that
     // are not needed for the core security functionality of Phase 4.
-
-    assert!(true, "Windows session-lock deferred to Phase 8");
 }
 
 #[test]
@@ -469,9 +496,8 @@ fn phase4_commands_lock_reopen_unlock_roundtrip() {
     veylora::commands::vault_open(path.clone(), manager.clone()).expect("reopen should succeed");
     assert!(manager.is_locked(), "reopen must not unlock");
 
-    let result =
-        veylora::commands::vault_unlock_pin("1234".into(), manager.clone())
-            .expect("unlock after lock should succeed");
+    let result = veylora::commands::vault_unlock_pin("1234".into(), manager.clone())
+        .expect("unlock after lock should succeed");
     assert_eq!(result.unlock_method, "pin");
     assert!(!manager.is_locked(), "vault unlocked with PIN");
 

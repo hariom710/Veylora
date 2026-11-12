@@ -14,12 +14,10 @@
 
 use std::io::Read;
 
-use crate::backup::{
-    container, BackupError, BackupInfo, Result,
-};
+use crate::backup::{container, BackupError, BackupInfo, Result};
 use crate::crypto::hkdf::LABEL_BACKUP_KEY;
-use sha2::{Digest, Sha256};
 use crate::database::Db;
+use sha2::{Digest, Sha256};
 
 /// Verify a backup container's integrity.
 ///
@@ -30,11 +28,8 @@ use crate::database::Db;
 /// verifies trailer structure (magic, file_count, blobs_hash, tag structure)
 /// and computes blobs_hash over the blob region using meta_len (plaintext in
 /// header) to locate the blob region boundary. Cannot decrypt manifest.
-pub fn verify_backup(
-    mvk: Option<&[u8; 32]>,
-    backup_path: &str,
-) -> Result<BackupInfo> {
-    let data = std::fs::read(backup_path).map_err(|e| BackupError::Io(e))?;
+pub fn verify_backup(mvk: Option<&[u8; 32]>, backup_path: &str) -> Result<BackupInfo> {
+    let data = std::fs::read(backup_path).map_err(BackupError::Io)?;
     if data.len() < container::TRAILER_FIXED_LEN {
         return Err(BackupError::InvalidContainer("file too small".to_string()));
     }
@@ -53,9 +48,9 @@ pub fn verify_backup(
 
         // Read encrypted manifest.
         let mut manifest_encrypted = vec![0u8; header.meta_len as usize];
-        cursor.read_exact(&mut manifest_encrypted).map_err(|e| {
-            BackupError::InvalidContainer(format!("bad manifest read: {e}"))
-        })?;
+        cursor
+            .read_exact(&mut manifest_encrypted)
+            .map_err(|e| BackupError::InvalidContainer(format!("bad manifest read: {e}")))?;
 
         // Verify meta_hash.
         let mut hash = Sha256::new();
@@ -67,18 +62,13 @@ pub fn verify_backup(
 
         // Verify trailer.
         let trailer_nonce = derive_backup_nonce(&backup_key, b"trailer-nonce")?;
-        let trailer = container::TrailerRegion::read(
-            &mut &trailer_data[..],
-            &backup_key,
-            &trailer_nonce,
-        )?;
+        let trailer =
+            container::TrailerRegion::read(&mut &trailer_data[..], &backup_key, &trailer_nonce)?;
 
         // Verify blobs_hash by streaming through blob region.
         let manifest_end = cursor.position() as usize;
         let mut blobs_hasher = Sha256::new();
-        for i in manifest_end..trailer_start {
-            blobs_hasher.update(&[data[i]]);
-        }
+        blobs_hasher.update(&data[manifest_end..trailer_start]);
         let actual_blobs_hash: [u8; 32] = blobs_hasher.finalize().into();
         if actual_blobs_hash != trailer.blobs_hash {
             return Err(BackupError::Corrupted("blobs hash mismatch".to_string()));
@@ -122,7 +112,9 @@ pub fn verify_backup(
 
         // Skip encrypted header payload (N bytes).
         if pos + payload_len > trailer_start {
-            return Err(BackupError::InvalidContainer("header payload overlaps trailer".to_string()));
+            return Err(BackupError::InvalidContainer(
+                "header payload overlaps trailer".to_string(),
+            ));
         }
         pos += payload_len;
 
@@ -134,7 +126,9 @@ pub fn verify_backup(
 
         // Skip meta_hash(32) + header_tag(16).
         if pos + 32 + 16 > trailer_start {
-            return Err(BackupError::InvalidContainer("header tail overlaps trailer".to_string()));
+            return Err(BackupError::InvalidContainer(
+                "header tail overlaps trailer".to_string(),
+            ));
         }
         pos += 32 + 16;
 
@@ -142,38 +136,44 @@ pub fn verify_backup(
         let manifest_start = pos;
         let manifest_end = manifest_start + meta_len;
         if manifest_end > trailer_start {
-            return Err(BackupError::InvalidContainer("manifest overlaps trailer".to_string()));
+            return Err(BackupError::InvalidContainer(
+                "manifest overlaps trailer".to_string(),
+            ));
         }
 
         // Verify trailer structure.
         let trailer_cursor = &mut &trailer_data[..];
 
         let mut trailer_magic = [0u8; 4];
-        trailer_cursor.read_exact(&mut trailer_magic)
+        trailer_cursor
+            .read_exact(&mut trailer_magic)
             .map_err(|e| BackupError::InvalidContainer(format!("bad trailer magic: {e}")))?;
         if trailer_magic != *container::TRAILER_MAGIC {
-            return Err(BackupError::InvalidContainer("bad trailer magic".to_string()));
+            return Err(BackupError::InvalidContainer(
+                "bad trailer magic".to_string(),
+            ));
         }
 
         let mut fc_bytes = [0u8; 8];
-        trailer_cursor.read_exact(&mut fc_bytes)
+        trailer_cursor
+            .read_exact(&mut fc_bytes)
             .map_err(|e| BackupError::InvalidContainer(format!("bad trailer file count: {e}")))?;
         let file_count = u64::from_le_bytes(fc_bytes);
 
         let mut blobs_hash = [0u8; 32];
-        trailer_cursor.read_exact(&mut blobs_hash)
+        trailer_cursor
+            .read_exact(&mut blobs_hash)
             .map_err(|e| BackupError::InvalidContainer(format!("bad trailer blobs hash: {e}")))?;
 
         let mut tag = [0u8; 16];
-        trailer_cursor.read_exact(&mut tag)
+        trailer_cursor
+            .read_exact(&mut tag)
             .map_err(|e| BackupError::InvalidContainer(format!("bad trailer tag: {e}")))?;
 
         // Verify blobs_hash over the blob region.
         // Blob region = [manifest_end, trailer_start).
         let mut blobs_hasher = Sha256::new();
-        for i in manifest_end..trailer_start {
-            blobs_hasher.update(&[data[i]]);
-        }
+        blobs_hasher.update(&data[manifest_end..trailer_start]);
         let actual_blobs_hash: [u8; 32] = blobs_hasher.finalize().into();
         if actual_blobs_hash != blobs_hash {
             return Err(BackupError::Corrupted("blobs hash mismatch".to_string()));
@@ -182,7 +182,7 @@ pub fn verify_backup(
         Ok(BackupInfo {
             path: backup_path.to_string(),
             file_count,
-            total_size: 0, // unknown without MVK
+            total_size: 0,      // unknown without MVK
             created_at_unix: 0, // unknown without MVK
             verified_fields: vec!["blobs_hash".to_string()],
         })
@@ -199,17 +199,22 @@ fn derive_backup_nonce(backup_key: &[u8; 32], info: &[u8]) -> Result<[u8; 24]> {
 
 /// List backup history from the database.
 pub fn list_backup_history(db: &Db) -> Result<Vec<crate::backup::BackupHistoryEntry>> {
-    let mut stmt = db.conn().prepare(
-        "SELECT backup_path, status, created_at FROM backup_history ORDER BY created_at DESC",
-    ).map_err(|e| BackupError::Internal(e.to_string()))?;
+    let mut stmt = db
+        .conn()
+        .prepare(
+            "SELECT backup_path, status, created_at FROM backup_history ORDER BY created_at DESC",
+        )
+        .map_err(|e| BackupError::Internal(e.to_string()))?;
 
-    let rows = stmt.query_map([], |row| {
-        Ok(crate::backup::BackupHistoryEntry {
-            path: row.get(0)?,
-            status: row.get(1)?,
-            created_at_unix: row.get(2)?,
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(crate::backup::BackupHistoryEntry {
+                path: row.get(0)?,
+                status: row.get(1)?,
+                created_at_unix: row.get(2)?,
+            })
         })
-    }).map_err(|e| BackupError::Internal(e.to_string()))?;
+        .map_err(|e| BackupError::Internal(e.to_string()))?;
 
     let mut entries = Vec::new();
     for r in rows {
@@ -225,10 +230,12 @@ pub fn record_backup_history(
     _status: &str,
     created_at_unix: i64,
 ) -> Result<()> {
-    db.conn().execute(
-        "INSERT INTO backup_history (created_at, backup_path, encrypted_size, verified, status)
+    db.conn()
+        .execute(
+            "INSERT INTO backup_history (created_at, backup_path, encrypted_size, verified, status)
          VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![created_at_unix, path, 0, 0, _status],
-    ).map_err(|e| BackupError::Internal(e.to_string()))?;
+            rusqlite::params![created_at_unix, path, 0, 0, _status],
+        )
+        .map_err(|e| BackupError::Internal(e.to_string()))?;
     Ok(())
 }

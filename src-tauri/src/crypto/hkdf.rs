@@ -31,7 +31,8 @@ pub fn derive_subkey(key: &[u8; 32], label: &[u8]) -> Result<[u8; 32]> {
     validate_label(label)?;
     let hkdf = Hkdf::<Sha256>::new(None, key);
     let mut okm = [0u8; 32];
-    hkdf.expand(label, &mut okm).map_err(|_| CryptoError::Hkdf)?;
+    hkdf.expand(label, &mut okm)
+        .map_err(|_| CryptoError::Hkdf)?;
     Ok(okm)
 }
 
@@ -46,7 +47,8 @@ pub fn derive_subkey_info(key: &[u8; 32], label: &[u8], info: &[u8]) -> Result<[
     let mut combined = label.to_vec();
     combined.extend_from_slice(info);
     let mut okm = [0u8; 32];
-    hkdf.expand(&combined, &mut okm).map_err(|_| CryptoError::Hkdf)?;
+    hkdf.expand(&combined, &mut okm)
+        .map_err(|_| CryptoError::Hkdf)?;
     Ok(okm)
 }
 
@@ -54,7 +56,7 @@ fn validate_label(label: &[u8]) -> Result<()> {
     if label.is_empty() {
         return Err(CryptoError::InvalidLabel(label.to_vec()));
     }
-    if EXACT_LABELS.iter().any(|&l| l == label) {
+    if EXACT_LABELS.contains(&label) {
         return Ok(());
     }
     if label.starts_with(LABEL_FILE_KEY_PREFIX) && label.len() > LABEL_FILE_KEY_PREFIX.len() {

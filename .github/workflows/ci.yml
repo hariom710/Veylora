@@ -44,16 +44,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
       # generate_context! embeds ../dist at compile time and fails if the
       # path is missing; tests don't serve assets, so an empty dir is enough.
       - run: New-Item -ItemType Directory -Force dist
-      # No `cargo fmt --check` gate: 49 files (incl. frozen crypto/storage/
-      # streaming/backup zones) are unformatted, and reformatting them is
-      # out of scope for v1.0. Clippy runs without -D warnings for the same
-      # reason: 26 of 28 style lints live in frozen zones.
-      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path src-tauri/Cargo.toml

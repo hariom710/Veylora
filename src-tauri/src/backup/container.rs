@@ -5,8 +5,8 @@
 //! derive_subkey_info(backup_key, LABEL_BACKUP_KEY, info) — subkeys, not
 //! new top-level HKDF labels.
 
-use chacha20poly1305::{XChaCha20Poly1305, KeyInit};
 use chacha20poly1305::aead::{Aead, Payload};
+use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use hybrid_array::Array;
 
 use std::io::{Read, Write};
@@ -25,14 +25,34 @@ const AAD_PREFIX: &[u8] = b"VYLB";
 fn aead_encrypt(key: &[u8; 32], nonce: &[u8; 24], aad: &[u8], plaintext: &[u8]) -> Vec<u8> {
     let cipher = XChaCha20Poly1305::new_from_slice(key).expect("aead init");
     let nonce_arr = Array(*nonce);
-    cipher.encrypt(&nonce_arr, Payload { aad, msg: plaintext }).expect("aead encrypt")
+    cipher
+        .encrypt(
+            &nonce_arr,
+            Payload {
+                aad,
+                msg: plaintext,
+            },
+        )
+        .expect("aead encrypt")
 }
 
-fn aead_decrypt(key: &[u8; 32], nonce: &[u8; 24], aad: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>> {
+fn aead_decrypt(
+    key: &[u8; 32],
+    nonce: &[u8; 24],
+    aad: &[u8],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>> {
     let cipher = XChaCha20Poly1305::new_from_slice(key)
         .map_err(|_| BackupError::Internal("aead init".to_string()))?;
     let nonce_arr = Array(*nonce);
-    cipher.decrypt(&nonce_arr, Payload { aad, msg: ciphertext })
+    cipher
+        .decrypt(
+            &nonce_arr,
+            Payload {
+                aad,
+                msg: ciphertext,
+            },
+        )
         .map_err(|_| BackupError::Corrupted("aead decrypt failed".to_string()))
 }
 
@@ -61,20 +81,20 @@ pub struct HeaderRegion {
 }
 
 impl HeaderRegion {
-    pub fn write<W: Write>(
-        &self,
-        writer: &mut W,
-        key: &[u8; 32],
-    ) -> Result<usize> {
+    pub fn write<W: Write>(&self, writer: &mut W, key: &[u8; 32]) -> Result<usize> {
         let mut written = 0;
 
         writer.write_all(BACKUP_MAGIC).map_err(BackupError::Io)?;
         written += 4;
 
-        writer.write_all(&BACKUP_VERSION.to_le_bytes()).map_err(BackupError::Io)?;
+        writer
+            .write_all(&BACKUP_VERSION.to_le_bytes())
+            .map_err(BackupError::Io)?;
         written += 4;
 
-        writer.write_all(&self.backup_nonce).map_err(BackupError::Io)?;
+        writer
+            .write_all(&self.backup_nonce)
+            .map_err(BackupError::Io)?;
         written += 24;
 
         // Header plaintext: vault_name_len || vault_name || created_at
@@ -90,13 +110,19 @@ impl HeaderRegion {
         let payload_len = encrypted.len() - TAG_LEN;
         let tag = &encrypted[payload_len..];
 
-        writer.write_all(&(payload_len as u32).to_le_bytes()).map_err(BackupError::Io)?;
+        writer
+            .write_all(&(payload_len as u32).to_le_bytes())
+            .map_err(BackupError::Io)?;
         written += 4;
 
-        writer.write_all(&encrypted[..payload_len]).map_err(BackupError::Io)?;
+        writer
+            .write_all(&encrypted[..payload_len])
+            .map_err(BackupError::Io)?;
         written += payload_len;
 
-        writer.write_all(&self.meta_len.to_le_bytes()).map_err(BackupError::Io)?;
+        writer
+            .write_all(&self.meta_len.to_le_bytes())
+            .map_err(BackupError::Io)?;
         written += 4;
 
         writer.write_all(&self.meta_hash).map_err(BackupError::Io)?;
@@ -108,49 +134,56 @@ impl HeaderRegion {
         Ok(written)
     }
 
-    pub fn read<R: Read>(
-        reader: &mut R,
-        key: &[u8; 32],
-    ) -> Result<Self> {
+    pub fn read<R: Read>(reader: &mut R, key: &[u8; 32]) -> Result<Self> {
         let mut magic = [0u8; 4];
-        reader.read_exact(&mut magic)
+        reader
+            .read_exact(&mut magic)
             .map_err(|e| BackupError::InvalidContainer(format!("bad magic: {e}")))?;
         if magic != *BACKUP_MAGIC {
             return Err(BackupError::InvalidContainer("bad magic".to_string()));
         }
 
         let mut ver_bytes = [0u8; 4];
-        reader.read_exact(&mut ver_bytes)
+        reader
+            .read_exact(&mut ver_bytes)
             .map_err(|e| BackupError::InvalidContainer(format!("bad version: {e}")))?;
         let version = u32::from_le_bytes(ver_bytes);
         if version != BACKUP_VERSION {
-            return Err(BackupError::InvalidContainer(format!("unsupported version {version}")));
+            return Err(BackupError::InvalidContainer(format!(
+                "unsupported version {version}"
+            )));
         }
 
         let mut backup_nonce = [0u8; 24];
-        reader.read_exact(&mut backup_nonce)
+        reader
+            .read_exact(&mut backup_nonce)
             .map_err(|e| BackupError::InvalidContainer(format!("bad nonce: {e}")))?;
 
         let mut plen_bytes = [0u8; 4];
-        reader.read_exact(&mut plen_bytes)
+        reader
+            .read_exact(&mut plen_bytes)
             .map_err(|e| BackupError::InvalidContainer(format!("bad payload len: {e}")))?;
         let payload_len = u32::from_le_bytes(plen_bytes) as usize;
 
         let mut ciphertext = vec![0u8; payload_len];
-        reader.read_exact(&mut ciphertext)
+        reader
+            .read_exact(&mut ciphertext)
             .map_err(|e| BackupError::InvalidContainer(format!("bad payload: {e}")))?;
 
         let mut mlen_bytes = [0u8; 4];
-        reader.read_exact(&mut mlen_bytes)
+        reader
+            .read_exact(&mut mlen_bytes)
             .map_err(|e| BackupError::InvalidContainer(format!("bad meta len: {e}")))?;
         let meta_len = u32::from_le_bytes(mlen_bytes);
 
         let mut meta_hash = [0u8; 32];
-        reader.read_exact(&mut meta_hash)
+        reader
+            .read_exact(&mut meta_hash)
             .map_err(|e| BackupError::InvalidContainer(format!("bad meta hash: {e}")))?;
 
         let mut tag = [0u8; 16];
-        reader.read_exact(&mut tag)
+        reader
+            .read_exact(&mut tag)
             .map_err(|e| BackupError::InvalidContainer(format!("bad header tag: {e}")))?;
 
         let mut full_ct = ciphertext;
@@ -164,7 +197,8 @@ impl HeaderRegion {
         if plaintext.len() < 4 {
             return Err(BackupError::Corrupted("header too short".to_string()));
         }
-        let name_len = u32::from_le_bytes([plaintext[0], plaintext[1], plaintext[2], plaintext[3]]) as usize;
+        let name_len =
+            u32::from_le_bytes([plaintext[0], plaintext[1], plaintext[2], plaintext[3]]) as usize;
         if plaintext.len() < 4 + name_len + 8 {
             return Err(BackupError::Corrupted("header truncated".to_string()));
         }
@@ -250,11 +284,7 @@ impl ManifestRegion {
         Ok(encrypted.len())
     }
 
-    pub fn read(
-        data: &[u8],
-        key: &[u8; 32],
-        nonce: &[u8; 24],
-    ) -> Result<Self> {
+    pub fn read(data: &[u8], key: &[u8; 32], nonce: &[u8; 24]) -> Result<Self> {
         if data.len() < 8 {
             return Err(BackupError::Corrupted("manifest too short".to_string()));
         }
@@ -270,8 +300,14 @@ impl ManifestRegion {
             return Err(BackupError::Corrupted("manifest too short".to_string()));
         }
         let file_count = u64::from_le_bytes([
-            plaintext[0], plaintext[1], plaintext[2], plaintext[3],
-            plaintext[4], plaintext[5], plaintext[6], plaintext[7],
+            plaintext[0],
+            plaintext[1],
+            plaintext[2],
+            plaintext[3],
+            plaintext[4],
+            plaintext[5],
+            plaintext[6],
+            plaintext[7],
         ]);
         let mut offset = 8;
 
@@ -288,8 +324,14 @@ impl ManifestRegion {
                 return Err(BackupError::Corrupted("manifest truncated".to_string()));
             }
             let encrypted_size = u64::from_le_bytes([
-                plaintext[offset], plaintext[offset + 1], plaintext[offset + 2], plaintext[offset + 3],
-                plaintext[offset + 4], plaintext[offset + 5], plaintext[offset + 6], plaintext[offset + 7],
+                plaintext[offset],
+                plaintext[offset + 1],
+                plaintext[offset + 2],
+                plaintext[offset + 3],
+                plaintext[offset + 4],
+                plaintext[offset + 5],
+                plaintext[offset + 6],
+                plaintext[offset + 7],
             ]);
             offset += 8;
 
@@ -297,7 +339,10 @@ impl ManifestRegion {
                 return Err(BackupError::Corrupted("manifest truncated".to_string()));
             }
             let encryption_ver = u32::from_le_bytes([
-                plaintext[offset], plaintext[offset + 1], plaintext[offset + 2], plaintext[offset + 3],
+                plaintext[offset],
+                plaintext[offset + 1],
+                plaintext[offset + 2],
+                plaintext[offset + 3],
             ]);
             offset += 4;
 
@@ -305,7 +350,10 @@ impl ManifestRegion {
                 return Err(BackupError::Corrupted("manifest truncated".to_string()));
             }
             let name_len = u32::from_le_bytes([
-                plaintext[offset], plaintext[offset + 1], plaintext[offset + 2], plaintext[offset + 3],
+                plaintext[offset],
+                plaintext[offset + 1],
+                plaintext[offset + 2],
+                plaintext[offset + 3],
             ]) as usize;
             offset += 4;
 
@@ -320,8 +368,14 @@ impl ManifestRegion {
                 return Err(BackupError::Corrupted("manifest truncated".to_string()));
             }
             let created_at = i64::from_le_bytes([
-                plaintext[offset], plaintext[offset + 1], plaintext[offset + 2], plaintext[offset + 3],
-                plaintext[offset + 4], plaintext[offset + 5], plaintext[offset + 6], plaintext[offset + 7],
+                plaintext[offset],
+                plaintext[offset + 1],
+                plaintext[offset + 2],
+                plaintext[offset + 3],
+                plaintext[offset + 4],
+                plaintext[offset + 5],
+                plaintext[offset + 6],
+                plaintext[offset + 7],
             ]);
             offset += 8;
 
@@ -329,8 +383,14 @@ impl ManifestRegion {
                 return Err(BackupError::Corrupted("manifest truncated".to_string()));
             }
             let modified_at = i64::from_le_bytes([
-                plaintext[offset], plaintext[offset + 1], plaintext[offset + 2], plaintext[offset + 3],
-                plaintext[offset + 4], plaintext[offset + 5], plaintext[offset + 6], plaintext[offset + 7],
+                plaintext[offset],
+                plaintext[offset + 1],
+                plaintext[offset + 2],
+                plaintext[offset + 3],
+                plaintext[offset + 4],
+                plaintext[offset + 5],
+                plaintext[offset + 6],
+                plaintext[offset + 7],
             ]);
             offset += 8;
 
@@ -371,10 +431,14 @@ impl TrailerRegion {
         writer.write_all(TRAILER_MAGIC).map_err(BackupError::Io)?;
         written += 4;
 
-        writer.write_all(&self.file_count.to_le_bytes()).map_err(BackupError::Io)?;
+        writer
+            .write_all(&self.file_count.to_le_bytes())
+            .map_err(BackupError::Io)?;
         written += 8;
 
-        writer.write_all(&self.blobs_hash).map_err(BackupError::Io)?;
+        writer
+            .write_all(&self.blobs_hash)
+            .map_err(BackupError::Io)?;
         written += 32;
 
         let mut aad = TRAILER_MAGIC.to_vec();
@@ -394,29 +458,31 @@ impl TrailerRegion {
         Ok(written)
     }
 
-    pub fn read<R: Read>(
-        reader: &mut R,
-        key: &[u8; 32],
-        nonce: &[u8; 24],
-    ) -> Result<Self> {
+    pub fn read<R: Read>(reader: &mut R, key: &[u8; 32], nonce: &[u8; 24]) -> Result<Self> {
         let mut magic = [0u8; 4];
-        reader.read_exact(&mut magic)
+        reader
+            .read_exact(&mut magic)
             .map_err(|e| BackupError::InvalidContainer(format!("bad trailer magic: {e}")))?;
         if magic != *TRAILER_MAGIC {
-            return Err(BackupError::InvalidContainer("bad trailer magic".to_string()));
+            return Err(BackupError::InvalidContainer(
+                "bad trailer magic".to_string(),
+            ));
         }
 
         let mut fc_bytes = [0u8; 8];
-        reader.read_exact(&mut fc_bytes)
+        reader
+            .read_exact(&mut fc_bytes)
             .map_err(|e| BackupError::InvalidContainer(format!("bad trailer file count: {e}")))?;
         let file_count = u64::from_le_bytes(fc_bytes);
 
         let mut blobs_hash = [0u8; 32];
-        reader.read_exact(&mut blobs_hash)
+        reader
+            .read_exact(&mut blobs_hash)
             .map_err(|e| BackupError::InvalidContainer(format!("bad trailer blobs hash: {e}")))?;
 
         let mut tag = [0u8; 16];
-        reader.read_exact(&mut tag)
+        reader
+            .read_exact(&mut tag)
             .map_err(|e| BackupError::InvalidContainer(format!("bad trailer tag: {e}")))?;
 
         // Recompute the AEAD tag over file_count || blobs_hash and compare.
@@ -433,10 +499,15 @@ impl TrailerRegion {
         let expected = aead_encrypt(key, nonce, &aad, &plaintext);
         let expected_tag = &expected[expected.len() - TAG_LEN..];
         if tag != expected_tag {
-            return Err(BackupError::Corrupted("trailer tag verification failed".to_string()));
+            return Err(BackupError::Corrupted(
+                "trailer tag verification failed".to_string(),
+            ));
         }
 
-        Ok(TrailerRegion { file_count, blobs_hash })
+        Ok(TrailerRegion {
+            file_count,
+            blobs_hash,
+        })
     }
 }
 

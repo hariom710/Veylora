@@ -1,8 +1,8 @@
 //! Recovery unlock: derive HKDF KEK from recovery key, unwrap MVK from vault.meta.
 //! Recovery keys use HKDF only (no Argon2id) — they already have 256 bits of entropy.
 
-use crate::auth::AuthError;
 use crate::auth::session::Session;
+use crate::auth::AuthError;
 use crate::auth::UnlockMethod;
 use crate::storage::vault_dir::VaultDir;
 use crate::vault::VaultMeta;
@@ -12,17 +12,20 @@ use std::hash::{Hash, Hasher};
 /// Unlock with a recovery key. Derives the HKDF KEK from the recovery key,
 /// unwraps the MVK from vault.meta, and returns a Session holding the
 /// zeroized MVK.
-pub fn unlock_with_recovery(vault_root: &std::path::Path, recovery_key: &[u8; 32]) -> Result<Session, AuthError> {
+pub fn unlock_with_recovery(
+    vault_root: &std::path::Path,
+    recovery_key: &[u8; 32],
+) -> Result<Session, AuthError> {
     let vdir = VaultDir::new(vault_root.to_path_buf());
     let meta_path = &vdir.meta_path;
 
     // Read vault.meta
-    let meta_str = std::fs::read_to_string(meta_path)
-        .map_err(|_| AuthError::VaultNotFound)?;
-    let meta: VaultMeta = serde_json::from_str(&meta_str)
-        .map_err(|_| AuthError::VaultCorrupted)?;
+    let meta_str = std::fs::read_to_string(meta_path).map_err(|_| AuthError::VaultNotFound)?;
+    let meta: VaultMeta = serde_json::from_str(&meta_str).map_err(|_| AuthError::VaultCorrupted)?;
 
-    let mvk = meta.unwrap_with_recovery(recovery_key).map_err(|_| AuthError::InvalidCredential)?;
+    let mvk = meta
+        .unwrap_with_recovery(recovery_key)
+        .map_err(|_| AuthError::InvalidCredential)?;
 
     // Verify MVK length
     if mvk.as_bytes().len() != 32 {

@@ -67,8 +67,7 @@ pub fn write_blob(
         }
     }
     let mut tmp_file = tmp_file.ok_or_else(|| {
-        BlobError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        BlobError::Io(std::io::Error::other(
             "failed to allocate temp path after 3 retries",
         ))
     })?;
@@ -192,13 +191,11 @@ mod tests {
     fn setup_vault() -> (std::path::PathBuf, [u8; 16], FileKey) {
         static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let id = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let tmp = std::env::current_dir()
-            .unwrap()
-            .join(format!(
-                "target/debug/test-vault-blob-{}-{}",
-                std::process::id(),
-                id
-            ));
+        let tmp = std::env::current_dir().unwrap().join(format!(
+            "target/debug/test-vault-blob-{}-{}",
+            std::process::id(),
+            id
+        ));
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
         let mvk = Mvk::generate().expect("mvk");
@@ -225,7 +222,10 @@ mod tests {
             .filter_map(|e| e.ok())
             .filter(|e| e.file_name().to_string_lossy().starts_with(".veylora-tmp-"))
             .collect();
-        assert!(tmp_files.is_empty(), "orphaned temp files remain after write");
+        assert!(
+            tmp_files.is_empty(),
+            "orphaned temp files remain after write"
+        );
 
         fs::remove_dir_all(&tmp).ok();
     }
@@ -243,9 +243,19 @@ mod tests {
         assert_eq!(out, plaintext);
 
         // Range spanning chunks
-        let out = read_blob(&tmp, &file_id, crate::storage::format::CHUNK_SIZE - 50, crate::storage::format::CHUNK_SIZE + 50, &file_key)
-            .expect("read range");
-        assert_eq!(out, plaintext[(crate::storage::format::CHUNK_SIZE - 50) as usize..(crate::storage::format::CHUNK_SIZE + 50) as usize]);
+        let out = read_blob(
+            &tmp,
+            &file_id,
+            crate::storage::format::CHUNK_SIZE - 50,
+            crate::storage::format::CHUNK_SIZE + 50,
+            &file_key,
+        )
+        .expect("read range");
+        assert_eq!(
+            out,
+            plaintext[(crate::storage::format::CHUNK_SIZE - 50) as usize
+                ..(crate::storage::format::CHUNK_SIZE + 50) as usize]
+        );
         fs::remove_dir_all(&tmp).ok();
     }
 
@@ -341,7 +351,10 @@ mod tests {
         impl Read for FailingReader {
             fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
                 if self.remaining == 0 {
-                    return Err(io::Error::new(io::ErrorKind::Interrupted, "simulated power loss"));
+                    return Err(io::Error::new(
+                        io::ErrorKind::Interrupted,
+                        "simulated power loss",
+                    ));
                 }
                 let n = buf.len().min(self.remaining);
                 self.remaining -= n;
@@ -352,23 +365,32 @@ mod tests {
         let mut failing = FailingReader { remaining: 100 }; // fail after 100 bytes
         let err = write_blob(&tmp, &file_id, &mut failing, &file_key).unwrap_err();
         match &err {
-            BlobError::Io(_) | BlobError::Format(_) => {}, // expected
+            BlobError::Io(_) | BlobError::Format(_) => {} // expected
             other => panic!("expected Io or Format error, got {:?}", other),
         }
 
         // No final file at the blob path
         let vdir = VaultDir::new(tmp.clone());
-        assert!(!vdir.blob_path(&file_id).exists(), "final path should not exist after failed write");
+        assert!(
+            !vdir.blob_path(&file_id).exists(),
+            "final path should not exist after failed write"
+        );
         let tmp_files: Vec<_> = fs::read_dir(&vdir.blobs_dir)
             .unwrap()
             .filter_map(|e| e.ok())
             .filter(|e| e.file_name().to_string_lossy().starts_with(".veylora-tmp-"))
             .collect();
-        assert!(!tmp_files.is_empty(), "orphaned temp file should exist after failed write");
+        assert!(
+            !tmp_files.is_empty(),
+            "orphaned temp file should exist after failed write"
+        );
 
         // startup_scan should clean it up
         let report = startup_scan(&tmp).expect("startup scan");
-        assert_eq!(report.tmp_files_removed, 1, "startup_scan should remove the orphaned tmp file");
+        assert_eq!(
+            report.tmp_files_removed, 1,
+            "startup_scan should remove the orphaned tmp file"
+        );
 
         // After cleanup, no temp files remain
         let tmp_files_after: Vec<_> = fs::read_dir(&vdir.blobs_dir)
@@ -376,13 +398,19 @@ mod tests {
             .filter_map(|e| e.ok())
             .filter(|e| e.file_name().to_string_lossy().starts_with(".veylora-tmp-"))
             .collect();
-        assert!(tmp_files_after.is_empty(), "temp files should be cleaned by startup_scan");
+        assert!(
+            tmp_files_after.is_empty(),
+            "temp files should be cleaned by startup_scan"
+        );
 
         // A subsequent write with the same file_id should succeed cleanly
         let plaintext = b"successful write after power loss";
         let mut reader = Cursor::new(plaintext.as_slice());
         write_blob(&tmp, &file_id, &mut reader, &file_key).expect("write after power loss");
-        assert!(vdir.blob_path(&file_id).exists(), "blob should exist after successful write");
+        assert!(
+            vdir.blob_path(&file_id).exists(),
+            "blob should exist after successful write"
+        );
 
         fs::remove_dir_all(&tmp).ok();
     }

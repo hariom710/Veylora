@@ -2,7 +2,7 @@
 //! file/folder command roundtrip (import → list → export → folder → rename
 //! → delete) through the same command layer the IPC handlers call.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use veylora::auth::session::SessionManager;
@@ -19,7 +19,7 @@ fn tmp_dir(tag: &str) -> PathBuf {
     dir
 }
 
-fn create_vault(root: &PathBuf, session: &Arc<SessionManager>) -> commands::VaultInfo {
+fn create_vault(root: &Path, session: &Arc<SessionManager>) -> commands::VaultInfo {
     let vault_path = root.join("vault");
     commands::vault_create(
         "test".to_string(),
@@ -104,12 +104,8 @@ fn sliceb_import_list_export_folder_rename_delete_roundtrip() {
 
     // Export roundtrip: decrypted bytes must equal the source.
     let dest = root.join("out.pdf");
-    let written = files::file_export(
-        row_id,
-        dest.to_string_lossy().into_owned(),
-        session.clone(),
-    )
-    .expect("export should succeed");
+    let written = files::file_export(row_id, dest.to_string_lossy().into_owned(), session.clone())
+        .expect("export should succeed");
     assert_eq!(written as usize, original.len());
     assert_eq!(std::fs::read(&dest).unwrap(), original);
 
@@ -128,19 +124,26 @@ fn sliceb_import_list_export_folder_rename_delete_roundtrip() {
     .expect("ranged preview");
     assert_eq!(ranged, original[4..=8].to_vec());
     // Wrong token is rejected (mapped to 403 by the protocol layer).
-    assert!(files::file_preview(format!("vault://file/{fid}?token=deadbeef"), session.clone())
-        .is_err());
+    assert!(files::file_preview(
+        format!("vault://file/{fid}?token=deadbeef"),
+        session.clone()
+    )
+    .is_err());
 
     // Folder creation + import into it.
-    let folder = files::folder_create("Docs".to_string(), None, session.clone())
-        .expect("folder_create");
+    let folder =
+        files::folder_create("Docs".to_string(), None, session.clone()).expect("folder_create");
     assert_eq!(folder.parent_id, None);
     let second = files::file_import(vec![src_str], Some(folder.id), session.clone())
         .expect("import into folder");
     assert_eq!(second[0].folder_id, Some(folder.id));
 
     let root_listing = files::file_list(None, session.clone()).unwrap();
-    assert_eq!(root_listing.files.len(), 1, "root holds only the first file");
+    assert_eq!(
+        root_listing.files.len(),
+        1,
+        "root holds only the first file"
+    );
     assert_eq!(root_listing.folders.len(), 1);
     let folder_listing = files::file_list(Some(folder.id), session.clone()).unwrap();
     assert_eq!(folder_listing.files.len(), 1);
@@ -158,8 +161,7 @@ fn sliceb_import_list_export_folder_rename_delete_roundtrip() {
     files::file_move(row_id, None, session.clone()).expect("move back to root");
 
     // Folder rename re-encrypts the name (round-trips through metadata key).
-    files::folder_rename(folder.id, "Archive".to_string(), session.clone())
-        .expect("folder rename");
+    files::folder_rename(folder.id, "Archive".to_string(), session.clone()).expect("folder rename");
     let folders = files::folder_list(None, session.clone()).unwrap();
     assert_eq!(folders[0].name, "Archive");
     assert!(
@@ -168,8 +170,7 @@ fn sliceb_import_list_export_folder_rename_delete_roundtrip() {
     );
 
     // Rename re-encrypts the filename.
-    files::file_rename(row_id, "renamed.pdf".to_string(), session.clone())
-        .expect("rename");
+    files::file_rename(row_id, "renamed.pdf".to_string(), session.clone()).expect("rename");
     let listing = files::file_list(None, session.clone()).unwrap();
     assert_eq!(listing.files[0].filename, "renamed.pdf");
     assert!(

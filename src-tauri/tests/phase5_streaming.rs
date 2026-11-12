@@ -4,27 +4,25 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use veylora::auth::session::{Session, SessionManager};
 use veylora::auth::UnlockMethod;
-use veylora::commands::CommandError;
 use veylora::commands::vault_get_session_token;
+use veylora::commands::CommandError;
 use veylora::crypto::hkdf::LABEL_METADATA_KEY;
 use veylora::crypto::mvk::Mvk;
 use veylora::crypto::recovery::generate_recovery_key;
 use veylora::database::Db;
-use veylora::streaming::{hex_encode, parse_url, handle_streaming_request, StreamError};
 use veylora::storage::vault_dir::VaultDir;
+use veylora::streaming::{handle_streaming_request, hex_encode, parse_url, StreamError};
 use veylora::vault::VaultMeta;
 
 fn setup_vault_dir() -> std::path::PathBuf {
-    let tmp = std::env::current_dir()
-        .unwrap()
-        .join(format!(
-            "target/debug/test-phase5-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()
-        ));
+    let tmp = std::env::current_dir().unwrap().join(format!(
+        "target/debug/test-phase5-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
     tmp
@@ -36,9 +34,8 @@ fn create_test_vault(tmp_dir: &std::path::Path) -> (Db, Mvk, [u8; 32], VaultDir)
     let mvk = Mvk::generate().expect("MVK generation failed");
     let mvk_bytes = *mvk.as_bytes();
     let recovery_key = generate_recovery_key();
-    let _metadata_key =
-        veylora::crypto::hkdf::derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY)
-            .expect("metadata key derivation failed");
+    let _metadata_key = veylora::crypto::hkdf::derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY)
+        .expect("metadata key derivation failed");
 
     let vdir = VaultDir::new(tmp_dir.to_path_buf());
     vdir.create_layout().expect("create vault dir layout");
@@ -65,9 +62,8 @@ fn create_test_vault(tmp_dir: &std::path::Path) -> (Db, Mvk, [u8; 32], VaultDir)
 /// Create a test file record in the vault DB.
 /// Returns the hex-encoded file_id string.
 fn create_test_file(db: &Db, mvk: &[u8; 32], plaintext: &[u8], filename: &str) -> String {
-    let metadata_key =
-        veylora::crypto::hkdf::derive_subkey(mvk, LABEL_METADATA_KEY)
-            .expect("metadata key derivation failed");
+    let metadata_key = veylora::crypto::hkdf::derive_subkey(mvk, LABEL_METADATA_KEY)
+        .expect("metadata key derivation failed");
 
     let file_id_bytes = *Mvk::generate().expect("MVK generation").as_bytes();
     let file_id_hex = hex_encode(&file_id_bytes);
@@ -87,7 +83,7 @@ fn create_test_file(db: &Db, mvk: &[u8; 32], plaintext: &[u8], filename: &str) -
 }
 
 /// Unlock the vault and return (manager, token).
-fn unlock_vault(db: &Db, mvk: &Mvk, vdir: &VaultDir) -> (SessionManager, String) {
+fn unlock_vault(_db: &Db, mvk: &Mvk, vdir: &VaultDir) -> (SessionManager, String) {
     let manager = SessionManager::new();
     let session = Session::new(mvk.clone(), 1, UnlockMethod::Pin);
     manager.set_session(session, vdir.meta_path.to_string_lossy().to_string());
@@ -126,7 +122,8 @@ fn phase5_url_parse_open_ended_range() {
 
 #[test]
 fn phase5_url_parse_missing_token() {
-    let url = "vault://file/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef?range=0-100";
+    let url =
+        "vault://file/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef?range=0-100";
     let err = parse_url(url).unwrap_err();
     assert!(matches!(err, StreamError::UrlParse(e) if e.contains("missing 'token'")));
 }
@@ -157,7 +154,7 @@ fn phase5_url_parse_multi_range() {
 #[test]
 fn phase5_token_rotates_on_unlock() {
     let tmp_dir = setup_vault_dir();
-    let (db, mvk, _, vdir) = create_test_vault(&tmp_dir);
+    let (_db, mvk, _, vdir) = create_test_vault(&tmp_dir);
 
     let manager = SessionManager::new();
 
@@ -208,7 +205,10 @@ fn phase5_token_validate_correct() {
     let _db = Db::open(&tmp_dir.join("vault.db")).expect("open db");
     let token_store = veylora::streaming::token::TokenStore::new();
     let token = token_store.generate();
-    assert!(token_store.validate(&token), "validate(correct) should be true");
+    assert!(
+        token_store.validate(&token),
+        "validate(correct) should be true"
+    );
 }
 
 #[test]
@@ -217,7 +217,10 @@ fn phase5_token_validate_wrong() {
     let _db = Db::open(&tmp_dir.join("vault.db")).expect("open db");
     let token_store = veylora::streaming::token::TokenStore::new();
     token_store.generate();
-    assert!(!token_store.validate("wrong_token"), "validate(wrong) should be false");
+    assert!(
+        !token_store.validate("wrong_token"),
+        "validate(wrong) should be false"
+    );
 }
 
 #[test]
@@ -226,7 +229,10 @@ fn phase5_token_invalidate() {
     let _db = Db::open(&tmp_dir.join("vault.db")).expect("open db");
     let token_store = veylora::streaming::token::TokenStore::new();
     let token = token_store.generate();
-    assert!(token_store.validate(&token), "initial validate should be true");
+    assert!(
+        token_store.validate(&token),
+        "initial validate should be true"
+    );
     token_store.invalidate();
     assert!(
         !token_store.validate(&token),
@@ -239,8 +245,7 @@ fn phase5_token_validate_is_constant_time() {
     // Source-scan guard: the test reads the source of streaming/token.rs
     // and asserts that validate() uses subtle::ConstantTimeEq (ct_eq),
     // not a plain == or != on token bytes.
-    let src = std::fs::read_to_string("src/streaming/token.rs")
-        .expect("read streaming/token.rs");
+    let src = std::fs::read_to_string("src/streaming/token.rs").expect("read streaming/token.rs");
     assert!(
         src.contains("ct_eq"),
         "TokenStore::validate must use ConstantTimeEq (ct_eq)"
@@ -263,7 +268,7 @@ fn phase5_session_token_requires_unlock() {
     let (db, mvk, _, vdir) = create_test_vault(&tmp_dir);
 
     let plaintext = b"token test data";
-    let _file_id_hex = create_test_file(&db, &mvk.as_bytes(), plaintext, "token_test.txt");
+    let _file_id_hex = create_test_file(&db, mvk.as_bytes(), plaintext, "token_test.txt");
 
     // Manager starts locked
     let manager = SessionManager::new();
@@ -319,7 +324,7 @@ fn phase5_handler_full_file_no_range() {
     let (db, mvk, _, vdir) = create_test_vault(&tmp_dir);
 
     let plaintext = b"Hello World this is a test file for veylora phase5";
-    let file_id_hex = create_test_file(&db, &mvk.as_bytes(), plaintext, "test.txt");
+    let file_id_hex = create_test_file(&db, mvk.as_bytes(), plaintext, "test.txt");
 
     let (manager, token) = unlock_vault(&db, &mvk, &vdir);
 
@@ -349,23 +354,16 @@ fn phase5_handler_range_request() {
     let (db, mvk, _, vdir) = create_test_vault(&tmp_dir);
 
     let plaintext = b"0123456789abcdef0123456789abcdef0123456789abcdef";
-    let file_id_hex = create_test_file(&db, &mvk.as_bytes(), plaintext, "test.txt");
+    let file_id_hex = create_test_file(&db, mvk.as_bytes(), plaintext, "test.txt");
 
     let (manager, token) = unlock_vault(&db, &mvk, &vdir);
 
-    let url = format!(
-        "vault://file/{}?token={}&range=4-8",
-        file_id_hex, token
-    );
+    let url = format!("vault://file/{}?token={}&range=4-8", file_id_hex, token);
 
     let result = handle_streaming_request(&manager, &db, &vdir, &url, None);
     assert!(result.is_ok(), "handler should succeed with valid token");
     let data = result.unwrap();
-    assert_eq!(
-        data.len(),
-        5,
-        "range [4,8] inclusive = 5 bytes"
-    );
+    assert_eq!(data.len(), 5, "range [4,8] inclusive = 5 bytes");
 }
 
 #[test]
@@ -374,7 +372,7 @@ fn phase5_handler_last_byte() {
     let (db, mvk, _, vdir) = create_test_vault(&tmp_dir);
 
     let plaintext = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
-    let file_id_hex = create_test_file(&db, &mvk.as_bytes(), plaintext, "test.txt");
+    let file_id_hex = create_test_file(&db, mvk.as_bytes(), plaintext, "test.txt");
 
     let (manager, token) = unlock_vault(&db, &mvk, &vdir);
 
@@ -404,7 +402,7 @@ fn phase5_handler_chunk_spanning() {
             plaintext.push(((i * chunk_size + j) % 256) as u8);
         }
     }
-    let file_id_hex = create_test_file(&db, &mvk.as_bytes(), &plaintext, "large.txt");
+    let file_id_hex = create_test_file(&db, mvk.as_bytes(), &plaintext, "large.txt");
 
     let (manager, token) = unlock_vault(&db, &mvk, &vdir);
 
@@ -430,14 +428,11 @@ fn phase5_head_request() {
     let (db, mvk, _, vdir) = create_test_vault(&tmp_dir);
 
     let plaintext = b"Hello for HEAD";
-    let file_id_hex = create_test_file(&db, &mvk.as_bytes(), plaintext, "test.txt");
+    let file_id_hex = create_test_file(&db, mvk.as_bytes(), plaintext, "test.txt");
 
     let (manager, token) = unlock_vault(&db, &mvk, &vdir);
 
-    let url = format!(
-        "vault://file/{}?token={}&head=true",
-        file_id_hex, token
-    );
+    let url = format!("vault://file/{}?token={}&head=true", file_id_hex, token);
 
     let result = handle_streaming_request(&manager, &db, &vdir, &url, None);
     assert!(result.is_ok(), "HEAD request should succeed");
@@ -457,7 +452,7 @@ fn phase5_locked_session_rejects() {
     let (db, mvk, _, vdir) = create_test_vault(&tmp_dir);
 
     let plaintext = b"secret data";
-    let _file_id_hex = create_test_file(&db, &mvk.as_bytes(), plaintext, "test.txt");
+    let _file_id_hex = create_test_file(&db, mvk.as_bytes(), plaintext, "test.txt");
 
     let url = "vault://file/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef?token=testtoken&range=0-10";
 
@@ -495,19 +490,16 @@ fn phase5_unknown_file_id() {
 fn phase5_tampered_chunk_abort() {
     // This test verifies that if a chunk is corrupted, the stream is
     // aborted and no unauthenticated bytes are sent.
-    
+
     let tmp_dir = setup_vault_dir();
     let (db, mvk, _, vdir) = create_test_vault(&tmp_dir);
 
     let plaintext = b"Hello World this is a test with a very long content";
-    let file_id_hex = create_test_file(&db, &mvk.as_bytes(), plaintext, "test.txt");
+    let file_id_hex = create_test_file(&db, mvk.as_bytes(), plaintext, "test.txt");
 
     let (manager, token) = unlock_vault(&db, &mvk, &vdir);
 
-    let url = format!(
-        "vault://file/{}?token={}&range=0-100",
-        file_id_hex, token
-    );
+    let url = format!("vault://file/{}?token={}&range=0-100", file_id_hex, token);
 
     let result = handle_streaming_request(&manager, &db, &vdir, &url, None);
     assert!(result.is_ok(), "handler should succeed with valid token");
@@ -517,18 +509,20 @@ fn phase5_tampered_chunk_abort() {
 fn phase5_no_plaintext_on_disk_invariant() {
     // Enforcement: no plaintext files should appear in vault_root during
     // a preview. Scoped to vault_root subtree since %TEMP% has OS churn.
-    
+
     let tmp_dir = setup_vault_dir();
     let (db, mvk, _, vdir) = create_test_vault(&tmp_dir);
 
     let plaintext = b"Phase 5 no plaintext invariant test data";
-    let file_id_hex = create_test_file(&db, &mvk.as_bytes(), plaintext, "invariant_test.txt");
+    let file_id_hex = create_test_file(&db, mvk.as_bytes(), plaintext, "invariant_test.txt");
 
     let (manager, token) = unlock_vault(&db, &mvk, &vdir);
 
     let url = format!(
         "vault://file/{}?token={}&range=0-{}",
-        file_id_hex, token, plaintext.len() - 1
+        file_id_hex,
+        token,
+        plaintext.len() - 1
     );
 
     // Snapshot before: list files in vault_root
@@ -550,7 +544,8 @@ fn phase5_no_plaintext_on_disk_invariant() {
         .collect();
 
     // Check that no new files appeared
-    let new_files: std::collections::HashSet<std::path::PathBuf> = after_files.difference(&before_files).cloned().collect();
+    let new_files: std::collections::HashSet<std::path::PathBuf> =
+        after_files.difference(&before_files).cloned().collect();
     assert!(
         new_files.is_empty(),
         "no plaintext files should appear in vault_root during preview; new files: {:?}",
@@ -562,8 +557,8 @@ fn phase5_no_plaintext_on_disk_invariant() {
 fn phase5_ipc_boundary_regression() {
     // Test: phase4_ipc_boundary_no_key_material must still pass.
     // Verify that vault_get_session_token returns String (hex), not key material.
-    let commands_src = std::fs::read_to_string("src/commands/mod.rs")
-        .expect("read commands/mod.rs");
+    let commands_src =
+        std::fs::read_to_string("src/commands/mod.rs").expect("read commands/mod.rs");
 
     // The vault_get_session_token command signature must NOT contain
     // key material type names: Mvk, Kek, Key, Ciphertext, Nonce
@@ -600,14 +595,16 @@ fn phase5_mid_stream_lock_behavior_is_all_or_nothing() {
             plaintext.push(((i * chunk_size + j) % 256) as u8);
         }
     }
-    let file_id_hex = create_test_file(&db, &mvk.as_bytes(), &plaintext, "multi_chunk.txt");
+    let file_id_hex = create_test_file(&db, mvk.as_bytes(), &plaintext, "multi_chunk.txt");
 
     let (manager, token) = unlock_vault(&db, &mvk, &vdir);
 
     // Request range spanning multiple chunks
     let url = format!(
         "vault://file/{}?token={}&range=0-{}",
-        file_id_hex, token, plaintext.len() - 1
+        file_id_hex,
+        token,
+        plaintext.len() - 1
     );
 
     // Hook that calls lock() after chunk 0 is processed.

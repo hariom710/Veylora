@@ -3,11 +3,11 @@
 use std::io::Write;
 use std::path::Path;
 
-use crate::backup::{container, BackupError, BackupInfo, Result};
 use crate::backup::container::ManifestEntry;
-use sha2::Sha256;
+use crate::backup::{container, BackupError, BackupInfo, Result};
 use crate::database::Db;
 use crate::storage::vault_dir::VaultDir;
+use sha2::Sha256;
 
 /// Derive backup_key = HKDF(MVK, "veylora/v1/backup-key").
 fn derive_backup_key(mvk: &[u8; 32]) -> Result<[u8; 32]> {
@@ -17,8 +17,12 @@ fn derive_backup_key(mvk: &[u8; 32]) -> Result<[u8; 32]> {
 
 /// Derive a 24-byte nonce from backup_key using subkey derivation with `info`.
 fn derive_backup_nonce(backup_key: &[u8; 32], info: &[u8]) -> Result<[u8; 24]> {
-    let subkey = crate::crypto::hkdf::derive_subkey_info(backup_key, crate::crypto::hkdf::LABEL_BACKUP_KEY, info)
-        .map_err(|e| BackupError::Internal(e.to_string()))?;
+    let subkey = crate::crypto::hkdf::derive_subkey_info(
+        backup_key,
+        crate::crypto::hkdf::LABEL_BACKUP_KEY,
+        info,
+    )
+    .map_err(|e| BackupError::Internal(e.to_string()))?;
     let mut nonce = [0u8; 24];
     nonce.copy_from_slice(&subkey[..24]);
     Ok(nonce)
@@ -53,8 +57,9 @@ pub fn create_backup(
     let backup_key = derive_backup_key(mvk)?;
 
     // Metadata key for reading filenames/timestamps from DB.
-    let metadata_key = crate::crypto::hkdf::derive_subkey(mvk, crate::crypto::hkdf::LABEL_METADATA_KEY)
-        .map_err(|e| BackupError::Internal(e.to_string()))?;
+    let metadata_key =
+        crate::crypto::hkdf::derive_subkey(mvk, crate::crypto::hkdf::LABEL_METADATA_KEY)
+            .map_err(|e| BackupError::Internal(e.to_string()))?;
 
     // List all files from the DB.
     let files = crate::database::files::list_files(db, &metadata_key, None)
@@ -70,7 +75,7 @@ pub fn create_backup(
         let file_id_bytes = hex_decode(&file.file_id)
             .ok_or_else(|| BackupError::Internal(format!("invalid file_id: {}", file.file_id)))?;
         let blob_path = vdir.blob_path(&file_id_bytes);
-        let blob_data = std::fs::read(&blob_path).map_err(|e| BackupError::Io(e))?;
+        let blob_data = std::fs::read(&blob_path).map_err(BackupError::Io)?;
         let actual_size = blob_data.len() as u64;
         entries.push(ManifestEntry {
             file_id: file_id_bytes,
@@ -85,7 +90,9 @@ pub fn create_backup(
     }
 
     let file_count = entries.len() as u64;
-    let manifest_region = container::ManifestRegion { entries: entries.clone() };
+    let manifest_region = container::ManifestRegion {
+        entries: entries.clone(),
+    };
 
     // Encrypt manifest first (need meta_len and meta_hash for header).
     let mut manifest_buf = Vec::new();
@@ -101,7 +108,8 @@ pub fn create_backup(
 
     // Generate random backup nonce.
     let mut backup_nonce = [0u8; 24];
-    getrandom::getrandom(&mut backup_nonce).map_err(|_| BackupError::Internal("rng".to_string()))?;
+    getrandom::getrandom(&mut backup_nonce)
+        .map_err(|_| BackupError::Internal("rng".to_string()))?;
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -127,7 +135,11 @@ pub fn create_backup(
     for _attempt in 0..3 {
         let suffix = random_hex(16);
         let path = dest.with_extension(format!("vey.tmp.{suffix}"));
-        match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
             Ok(f) => {
                 tmp_file = Some(f);
                 actual_tmp_path = Some(path);
@@ -138,14 +150,12 @@ pub fn create_backup(
         }
     }
     let mut writer = tmp_file.ok_or_else(|| {
-        BackupError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        BackupError::Io(std::io::Error::other(
             "failed to allocate temp path after 3 retries",
         ))
     })?;
     let tmp_path = actual_tmp_path.ok_or_else(|| {
-        BackupError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        BackupError::Io(std::io::Error::other(
             "failed to allocate temp path after 3 retries",
         ))
     })?;
