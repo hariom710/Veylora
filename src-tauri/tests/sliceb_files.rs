@@ -145,6 +145,28 @@ fn sliceb_import_list_export_folder_rename_delete_roundtrip() {
     let folder_listing = files::file_list(Some(folder.id), session.clone()).unwrap();
     assert_eq!(folder_listing.files.len(), 1);
 
+    // Move the root file into the folder, then back — rejects unknown folders.
+    files::file_move(row_id, Some(folder.id), session.clone()).expect("move into folder");
+    let root_listing = files::file_list(None, session.clone()).unwrap();
+    assert!(root_listing.files.is_empty(), "root empty after move");
+    let folder_listing = files::file_list(Some(folder.id), session.clone()).unwrap();
+    assert_eq!(folder_listing.files.len(), 2, "both files in the folder");
+    assert!(
+        files::file_move(row_id, Some(9_999), session.clone()).is_err(),
+        "unknown target folder rejected"
+    );
+    files::file_move(row_id, None, session.clone()).expect("move back to root");
+
+    // Folder rename re-encrypts the name (round-trips through metadata key).
+    files::folder_rename(folder.id, "Archive".to_string(), session.clone())
+        .expect("folder rename");
+    let folders = files::folder_list(None, session.clone()).unwrap();
+    assert_eq!(folders[0].name, "Archive");
+    assert!(
+        files::folder_rename(folder.id, "   ".to_string(), session.clone()).is_err(),
+        "empty folder name rejected"
+    );
+
     // Rename re-encrypts the filename.
     files::file_rename(row_id, "renamed.pdf".to_string(), session.clone())
         .expect("rename");

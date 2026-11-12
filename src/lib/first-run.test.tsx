@@ -17,9 +17,10 @@ vi.mock('@/lib/ipc', () => ({
   fileRecent: vi.fn(),
   fileFavorites: vi.fn(),
   fileFavorite: vi.fn(),
+  vaultBackupHistory: vi.fn(),
 }));
 
-import { appStatus, vaultStatus, vaultOpen } from '@/lib/ipc';
+import { appStatus, vaultStatus, vaultOpen, vaultBackupHistory } from '@/lib/ipc';
 
 describe('first run (no vault open)', () => {
   beforeEach(() => {
@@ -34,6 +35,8 @@ describe('first run (no vault open)', () => {
       ok: true,
       data: { locked: true, vault_id: null, file_count: 0, storage_used: 0, vault_open: false },
     });
+    // Dashboard mounts in some tests and reads the last backup at mount.
+    vaultBackupHistory.mockResolvedValue({ ok: true, data: [] });
   });
 
   it('shows Create Vault instead of Unlock when no vault is open', async () => {

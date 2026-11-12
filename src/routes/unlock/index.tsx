@@ -85,6 +85,44 @@ export default function Unlock({ onUnlock }: { onUnlock: (method: string, value:
                     placeholder="Enter PIN"
                     required
                   />
+                  {/* Circular keypad (Phase 2 brief): an alternative entry
+                      method. The input above stays editable for keyboards,
+                      paste, tests and automation. */}
+                  <div className="grid grid-cols-3 gap-3 justify-items-center mt-4">
+                    {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setValue((v) => (v.length >= 6 ? v : v + d))}
+                        className="w-14 h-14 rounded-full border border-border bg-elevated text-title-3 text-foreground hover:border-accent hover:text-accent transition-colors"
+                      >
+                        {d}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      aria-label="Clear"
+                      onClick={() => setValue('')}
+                      className="w-14 h-14 rounded-full border border-border bg-elevated text-body-sm text-muted hover:border-accent hover:text-accent transition-colors"
+                    >
+                      C
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setValue((v) => (v.length >= 6 ? v : v + '0'))}
+                      className="w-14 h-14 rounded-full border border-border bg-elevated text-title-3 text-foreground hover:border-accent hover:text-accent transition-colors"
+                    >
+                      0
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Backspace"
+                      onClick={() => setValue((v) => v.slice(0, -1))}
+                      className="w-14 h-14 rounded-full border border-border bg-elevated text-body text-muted hover:border-accent hover:text-accent transition-colors"
+                    >
+                      ⌫
+                    </button>
+                  </div>
                 </div>
               )}
               {method === 'password' && (

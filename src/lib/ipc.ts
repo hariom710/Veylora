@@ -102,6 +102,14 @@ type CommandMap = {
     args: { id: number; newFilename: string };
     result: void;
   };
+  file_move_cmd: {
+    args: { id: number; folderId: number | null };
+    result: void;
+  };
+  folder_rename_cmd: {
+    args: { id: number; newName: string };
+    result: void;
+  };
   folder_list_cmd: {
     args: { parentId: number | null };
     result: FolderInfo[];
@@ -464,6 +472,30 @@ export async function folderCreate(
 ): Promise<Result<FolderInfo, CommandError>> {
   try {
     const data = await invokeCmd('folder_create_cmd', { name, parentId });
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, error: parseError(e) };
+  }
+}
+
+export async function fileMove(
+  id: number,
+  folderId: number | null,
+): Promise<Result<void, CommandError>> {
+  try {
+    const data = await invokeCmd('file_move_cmd', { id, folderId });
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, error: parseError(e) };
+  }
+}
+
+export async function folderRename(
+  id: number,
+  newName: string,
+): Promise<Result<void, CommandError>> {
+  try {
+    const data = await invokeCmd('folder_rename_cmd', { id, newName });
     return { ok: true, data };
   } catch (e) {
     return { ok: false, error: parseError(e) };

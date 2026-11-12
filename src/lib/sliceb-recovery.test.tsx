@@ -29,6 +29,7 @@ vi.mock('@/lib/ipc', () => ({
   fileFavorites: vi.fn(),
   fileRecent: vi.fn(),
   folderCreate: vi.fn(),
+  vaultBackupHistory: vi.fn(),
 }));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
@@ -45,6 +46,7 @@ import {
   fileRecent,
   fileFavorites,
   vaultActivity,
+  vaultBackupHistory,
 } from '@/lib/ipc';
 
 const LOGGED_OUT = {
@@ -89,6 +91,7 @@ describe('Slice B: create vault → recovery key → dashboard', () => {
     vaultGetSessionToken.mockResolvedValue({ ok: true, data: 'token_1' });
     fileRecent.mockResolvedValue({ ok: true, data: [] });
     fileFavorites.mockResolvedValue({ ok: true, data: [] });
+    vaultBackupHistory.mockResolvedValue({ ok: true, data: [] });
     vaultActivity.mockResolvedValue({ ok: true, data: undefined });
   });
 

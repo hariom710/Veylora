@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import FileManager from './index';
@@ -13,6 +13,9 @@ vi.mock('@/lib/ipc', () => ({
   fileFavorite: vi.fn(),
   fileFavorites: vi.fn(),
   folderCreate: vi.fn(),
+  folderRename: vi.fn(),
+  folderList: vi.fn(),
+  fileMove: vi.fn(),
 }));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
@@ -24,7 +27,10 @@ import {
   fileList,
   fileImport,
   fileDelete,
+  fileRename,
   fileFavorites,
+  fileMove,
+  folderList,
 } from '@/lib/ipc';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 
@@ -106,5 +112,67 @@ describe('FileManager', () => {
 
     expect(fileDelete).toHaveBeenCalledWith(1);
     confirmSpy.mockRestore();
+  });
+
+  it('renames through the right-click context menu', async () => {
+    const user = userEvent.setup();
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('new-name.pdf');
+    fileRename.mockResolvedValue({ ok: true, data: undefined });
+    renderManager();
+    await screen.findByText(/document\.pdf/i);
+
+    fireEvent.contextMenu(screen.getByTestId('file-row-1'), { clientX: 10, clientY: 20 });
+    await user.click(await screen.findByRole('menuitem', { name: 'Rename…' }));
+
+    expect(fileRename).toHaveBeenCalledWith(1, 'new-name.pdf');
+    promptSpy.mockRestore();
+  });
+
+  it('moves a file into a folder through the context menu', async () => {
+    const user = userEvent.setup();
+    folderList.mockResolvedValue({
+      ok: true,
+      data: [{ id: 7, parent_id: null, name: 'Docs', created_at: '0' }],
+    });
+    fileMove.mockResolvedValue({ ok: true, data: undefined });
+    renderManager();
+    await screen.findByText(/document\.pdf/i);
+
+    fireEvent.contextMenu(screen.getByTestId('file-row-1'), { clientX: 10, clientY: 20 });
+    await user.click(await screen.findByRole('menuitem', { name: 'Move to folder…' }));
+    await user.click(await screen.findByRole('button', { name: 'Docs' }));
+
+    expect(fileMove).toHaveBeenCalledWith(1, 7);
+    expect(await screen.findByText(/Moved "document\.pdf"/)).toBeInTheDocument();
+  });
+
+  it('batch-deletes the selected files after one confirmation', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderManager();
+    await screen.findByText(/document\.pdf/i);
+
+    await user.click(screen.getByRole('button', { name: 'Select' }));
+    await user.click(screen.getByLabelText('Select document.pdf'));
+    await user.click(screen.getByLabelText('Select video.mp4'));
+    expect(screen.getByTestId('selected-count').textContent).toBe('2 selected');
+
+    fileDelete.mockResolvedValue({ ok: true, data: undefined });
+    await user.click(screen.getByRole('button', { name: 'Delete selected' }));
+
+    expect(fileDelete).toHaveBeenCalledTimes(2);
+    expect(fileDelete).toHaveBeenCalledWith(1);
+    expect(fileDelete).toHaveBeenCalledWith(2);
+    confirmSpy.mockRestore();
+  });
+
+  it('shows a search-specific empty state instead of the folder message', async () => {
+    const user = userEvent.setup();
+    renderManager();
+    await screen.findByText(/document\.pdf/i);
+
+    await user.type(screen.getByPlaceholderText(/Search files/i), 'zzz');
+    expect(screen.getByText(/No files match “zzz”/)).toBeInTheDocument();
+    expect(screen.queryByText(/No files in this folder/)).not.toBeInTheDocument();
   });
 });

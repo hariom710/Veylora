@@ -55,6 +55,27 @@ describe('Unlock screen', () => {
     expect(mockOnUnlock).toHaveBeenCalledWith('pin', 'token123');
   });
 
+  it('keypad digits fill the PIN and Backspace edits it', async () => {
+    const user = userEvent.setup();
+    vaultUnlockPin.mockResolvedValue({ ok: true, data: { vault_id: 1, unlock_method: 'pin' } });
+    render(<Unlock onUnlock={mockOnUnlock} />);
+
+    // Circular keypad: 1,2,3,4 → "1234", then Backspace → "123", then 5 → "1235".
+    for (const d of ['1', '2', '3', '4']) {
+      await user.click(screen.getByRole('button', { name: d, exact: true }));
+    }
+    await user.click(screen.getByRole('button', { name: 'Backspace' }));
+    await user.click(screen.getByRole('button', { name: '5', exact: true }));
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+    for (const d of ['1', '2', '3', '4']) {
+      await user.click(screen.getByRole('button', { name: d, exact: true }));
+    }
+    await user.click(screen.getByRole('button', { name: /Unlock/i }));
+
+    expect(vaultUnlockPin).toHaveBeenCalledWith('1234');
+    expect(mockOnUnlock).toHaveBeenCalledWith('pin', 'token123');
+  });
+
   it('shows error for invalid PIN', async () => {
     const user = userEvent.setup();
     vaultUnlockPin.mockRejectedValue(new Error('invalid credential'));

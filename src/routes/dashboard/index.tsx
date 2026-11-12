@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardTitle } from '@/components/ui/card';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { vaultStatus, fileImport, fileRecent, fileFavorites } from '@/lib/ipc';
+import { vaultStatus, fileImport, fileRecent, fileFavorites, vaultBackupHistory } from '@/lib/ipc';
 import { onFilesDropped } from '@/lib/dragDrop';
 import { formatBytes } from '@/lib/format';
 import type { FileInfo } from '@/lib/types';
@@ -21,6 +21,8 @@ export default function Dashboard({ sessionToken }: DashboardProps) {
   const [busy, setBusy] = useState(false);
   const [recent, setRecent] = useState<FileInfo[]>([]);
   const [favorites, setFavorites] = useState<FileInfo[]>([]);
+  // Last manual backup, from backup_history (newest first); '—' = never.
+  const [lastBackup, setLastBackup] = useState<string>('—');
 
   useEffect(() => {
     loadStatus();
@@ -29,6 +31,11 @@ export default function Dashboard({ sessionToken }: DashboardProps) {
     });
     fileFavorites().then((r) => {
       if (r.ok) setFavorites(r.data);
+    });
+    vaultBackupHistory().then((r) => {
+      if (r.ok && r.data.length > 0) {
+        setLastBackup(new Date(r.data[0].created_at_unix * 1000).toLocaleString());
+      }
     });
   }, []);
 
@@ -88,48 +95,71 @@ export default function Dashboard({ sessionToken }: DashboardProps) {
         {loading ? (
           <div className="text-muted">Loading...</div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card>
-              <CardContent>
-                <CardTitle>Welcome back</CardTitle>
-                <p className="text-muted text-sm">
-                  {status?.file_count ?? 0} files encrypted
-                </p>
-                <p className="text-muted text-sm">
-                  Storage: {formatBytes(status?.storage_used ?? 0)}
-                </p>
-                <p className="text-muted text-sm">
-                  {status?.locked ? 'Locked' : 'Unlocked'}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent>
-                <CardTitle>Quick Import</CardTitle>
-                <Button className="w-full" onClick={handleImport} disabled={busy}>
-                  {busy ? 'Importing...' : 'Import Files'}
-                </Button>
-                <Button
-                  className="w-full mt-2"
-                  variant="outline"
-                  onClick={() => navigate('/filemanager')}
-                >
-                  Browse Files
-                </Button>
-                <div className="mt-4 border border-dashed border-border rounded-card p-4 text-center text-caption text-muted-foreground">
-                  Drag files here to import
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent>
-                <CardTitle>Session</CardTitle>
-                <p className="text-muted text-sm break-all">
-                  Token: {sessionToken ? 'active' : 'none'}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+          <>
+            {/* Stat cards (Phase 2 brief): counts from vault_status, last
+                backup from vault_backup_history. No welcome copy — the
+                numbers are the headline. */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card>
+                <CardContent>
+                  <div className="text-caption text-muted-foreground">Files</div>
+                  <p className="mt-1 text-title-2 text-foreground">
+                    {`${status?.file_count ?? 0} files encrypted`}
+                  </p>
+                  <p className="text-caption text-muted-foreground mt-1">
+                    {status?.locked ? 'Vault locked' : 'Vault unlocked'}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent>
+                  <div className="text-caption text-muted-foreground">Storage</div>
+                  <p className="mt-1 text-title-2 text-foreground">
+                    {`Storage: ${formatBytes(status?.storage_used ?? 0)}`}
+                  </p>
+                  <p className="text-caption text-muted-foreground mt-1">Encrypted at rest</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent>
+                  <div className="text-caption text-muted-foreground">Last backup</div>
+                  <p className="mt-1 text-title-2 text-foreground">{lastBackup}</p>
+                  <p className="text-caption text-muted-foreground mt-1">Manual backups only</p>
+                </CardContent>
+              </Card>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+              <Card>
+                <CardContent>
+                  <CardTitle>Quick Import</CardTitle>
+                  <Button className="w-full" onClick={handleImport} disabled={busy}>
+                    {busy ? 'Importing...' : 'Import Files'}
+                  </Button>
+                  <Button
+                    className="w-full mt-2"
+                    variant="outline"
+                    onClick={() => navigate('/filemanager')}
+                  >
+                    Browse Files
+                  </Button>
+                  <div className="mt-4 border border-dashed border-border rounded-card p-4 text-center text-caption text-muted-foreground">
+                    Drag files here to import
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent>
+                  <CardTitle>Session</CardTitle>
+                  <p className="text-muted text-sm">
+                    Vault: {status?.locked ? 'Locked' : 'Unlocked'}
+                  </p>
+                  <p className="text-muted text-sm mt-1">
+                    Token: {sessionToken ? 'active' : 'none'}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </>
         )}
 
         {!loading && (

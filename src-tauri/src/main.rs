@@ -241,6 +241,24 @@ fn folder_create_cmd(
     veylora::commands::files::folder_create(name, parent_id, state.inner().clone())
 }
 
+#[tauri::command]
+fn file_move_cmd(
+    id: u64,
+    folder_id: Option<u64>,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<(), String> {
+    veylora::commands::files::file_move(id, folder_id, state.inner().clone())
+}
+
+#[tauri::command]
+fn folder_rename_cmd(
+    id: u64,
+    new_name: String,
+    state: tauri::State<'_, Arc<SessionManager>>,
+) -> Result<(), String> {
+    veylora::commands::files::folder_rename(id, new_name, state.inner().clone())
+}
+
 // ---- Slice C: favorites / recent / activity / settings / danger zone ----
 
 #[tauri::command]
@@ -402,6 +420,8 @@ fn main() {
             file_rename_cmd,
             folder_list_cmd,
             folder_create_cmd,
+            file_move_cmd,
+            folder_rename_cmd,
             file_favorite_cmd,
             file_favorites_cmd,
             file_recent_cmd,

@@ -111,6 +111,19 @@ export default function Account({ app, onLogout }: AccountProps) {
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-3xl mx-auto space-y-6">
+        <div className="flex items-center gap-4">
+          {/* Avatar (Phase 2 brief): initial, local, no gravatar/network. */}
+          <div
+            className="w-14 h-14 rounded-full bg-elevated border border-border flex items-center justify-center text-title-3 text-accent select-none shrink-0"
+            aria-hidden="true"
+          >
+            {(app.email || '?').charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <div className="text-body font-semibold text-foreground truncate">{app.email}</div>
+            <div className="text-caption text-muted capitalize">{app.role}</div>
+          </div>
+        </div>
         <h1 className="text-title-1">Account</h1>
 
         <Card>
@@ -286,7 +299,7 @@ export default function Account({ app, onLogout }: AccountProps) {
 
         <div className="flex justify-end">
           <Button variant="destructive" onClick={handleLogout}>
-            Log out
+            Sign out
           </Button>
         </div>
       </div>

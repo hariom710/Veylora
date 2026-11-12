@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardTitle, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -76,9 +76,15 @@ export default function Settings() {
     autoLockSet(autoLock).catch(() => {});
   }, [autoLock]);
 
+  // Success toast: auto-dismissing, bottom-right (error stays inline so a
+  // failed action can never vanish before it is read).
+  const toastTimer = useRef<number | null>(null);
+
   function ok(msg: string) {
     setError(null);
     setMessage(msg);
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setMessage(null), 3000);
   }
 
   async function handleAutoLock(secs: number) {
@@ -175,15 +181,14 @@ export default function Settings() {
       <div className="max-w-3xl mx-auto">
         <h1 className="text-title-1 mb-6">Settings</h1>
 
-        <div className="flex flex-wrap gap-6 mb-6 border-b border-border">
+        {/* Segmented control (Phase 2 brief) replaces the underline tabs. */}
+        <div className="inline-flex flex-wrap gap-1 p-1 bg-surface border border-border rounded-button mb-6">
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`pb-3 -mb-px text-body-sm font-medium transition-colors ${
-                tab === t.id
-                  ? 'text-foreground border-b-2 border-accent'
-                  : 'text-muted hover:text-foreground border-b-2 border-transparent'
+              className={`px-4 py-1.5 rounded-button text-body-sm font-medium transition-colors ${
+                tab === t.id ? 'bg-elevated text-foreground' : 'text-muted hover:text-foreground'
               }`}
             >
               {t.label}
@@ -197,7 +202,12 @@ export default function Settings() {
           </div>
         )}
         {message && (
-          <div className="mb-4 text-sm text-success bg-success/10 p-3 rounded-input">{message}</div>
+          <div
+            role="status"
+            className="fixed bottom-6 right-6 z-50 text-sm text-success bg-surface border border-success/40 rounded-input px-4 py-3"
+          >
+            {message}
+          </div>
         )}
 
         {tab === 'security' && (

@@ -25,6 +25,7 @@ vi.mock('@/lib/ipc', () => ({
   fileRecent: vi.fn(),
   fileFavorites: vi.fn(),
   fileFavorite: vi.fn(),
+  vaultBackupHistory: vi.fn(),
 }));
 
 import {
@@ -40,6 +41,7 @@ import {
   fileFavorites,
   vaultActivity,
   autoLockSet,
+  vaultBackupHistory,
 } from '@/lib/ipc';
 
 const LOGGED_OUT = {
@@ -73,6 +75,7 @@ describe('phase9 app login gate', () => {
     // Dashboard (main UI) screens call these at mount.
     fileRecent.mockResolvedValue({ ok: true, data: [] });
     fileFavorites.mockResolvedValue({ ok: true, data: [] });
+    vaultBackupHistory.mockResolvedValue({ ok: true, data: [] });
     vaultActivity.mockResolvedValue({ ok: true, data: undefined });
     autoLockSet.mockResolvedValue({ ok: true, data: undefined });
   });
@@ -161,7 +164,7 @@ describe('phase9 app login gate', () => {
 
     await screen.findByRole('heading', { name: /Dashboard/i });
     await user.click(screen.getByRole('link', { name: 'Account' }));
-    await user.click(await screen.findByRole('button', { name: /Log out/i }));
+    await user.click(await screen.findByRole('button', { name: /Sign out/i }));
 
     expect(await screen.findByText('Your Files. Your Privacy. Your Control.')).toBeInTheDocument();
     expect(appLogout).toHaveBeenCalled();

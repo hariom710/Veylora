@@ -254,17 +254,8 @@ pub fn file_preview(
     let db = super::open_db_for_session(&session)?;
     // Row-existence gate: never serve an orphan blob (a crash between
     // write_blob and insert_file can leave one behind).
-    let known: i64 = db
-        .conn()
-        .query_row(
-            "SELECT COUNT(*) FROM encrypted_files WHERE file_id = ?1",
-            [path],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
-    if known == 0 {
-        return Err("file not found".to_string());
-    }
+    crate::database::files::get_file_id_by_file_id(&db, path)
+        .map_err(|_| "file not found".to_string())?;
     let file_id = hex_decode(path).ok_or_else(|| "invalid file id".to_string())?;
 
     // Key material stays inside the closure (zeroized on drop with FileKey).
@@ -359,6 +350,40 @@ pub fn folder_create(
     let record =
         crate::database::folders::get_folder(&db, &metadata_key, id).map_err(|e| e.to_string())?;
     Ok(to_folder_info(record))
+}
+
+/// Move a file to another folder (None = root).
+pub fn file_move(
+    id: u64,
+    folder_id: Option<u64>,
+    session: Arc<SessionManager>,
+) -> Result<(), String> {
+    require_unlocked(&session)?;
+    let db = super::open_db_for_session(&session)?;
+    let metadata_key = metadata_key(&session)?;
+    // Resolves the row and 404s on unknown ids.
+    crate::database::files::get_file(&db, &metadata_key, id).map_err(|e| e.to_string())?;
+    // The target folder must exist (None = root).
+    if let Some(fid) = folder_id {
+        crate::database::folders::get_folder(&db, &metadata_key, fid).map_err(|e| e.to_string())?;
+    }
+    crate::database::files::move_file(&db, id, folder_id).map_err(|e| e.to_string())
+}
+
+/// Rename a folder — the new name is re-encrypted in vault.db.
+pub fn folder_rename(
+    id: u64,
+    new_name: String,
+    session: Arc<SessionManager>,
+) -> Result<(), String> {
+    require_unlocked(&session)?;
+    if new_name.trim().is_empty() {
+        return Err("folder name cannot be empty".to_string());
+    }
+    let db = super::open_db_for_session(&session)?;
+    let metadata_key = metadata_key(&session)?;
+    crate::database::folders::rename_folder(&db, &metadata_key, id, new_name.trim())
+        .map_err(|e| e.to_string())
 }
 
 /// Star or unstar a file.

@@ -16,6 +16,7 @@ vi.mock('@/lib/ipc', () => ({
   fileRecent: vi.fn(),
   fileFavorites: vi.fn(),
   fileFavorite: vi.fn(),
+  vaultBackupHistory: vi.fn(),
 }));
 
 import {
@@ -28,6 +29,7 @@ import {
   fileRecent,
   fileFavorites,
   vaultActivity,
+  vaultBackupHistory,
 } from '@/lib/ipc';
 
 describe('phase6_token_rotates_after_lock_unlock', () => {
@@ -46,6 +48,7 @@ describe('phase6_token_rotates_after_lock_unlock', () => {
     vaultStatus.mockResolvedValue({ ok: true, data: { locked: true, vault_id: null, file_count: 0, storage_used: 0, vault_open: true } });
     fileRecent.mockResolvedValue({ ok: true, data: [] });
     fileFavorites.mockResolvedValue({ ok: true, data: [] });
+    vaultBackupHistory.mockResolvedValue({ ok: true, data: [] });
     vaultActivity.mockResolvedValue({ ok: true, data: undefined });
   });
 

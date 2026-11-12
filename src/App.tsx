@@ -66,6 +66,8 @@ function AppContentInner() {
   // Recovery key shown exactly once, right after vault creation. Held only
   // in memory; cleared on Continue (never persisted, never re-displayable).
   const [pendingRecovery, setPendingRecovery] = useState<string | null>(null);
+  // Ctrl+/ cheat-sheet overlay (main app only).
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     boot();
@@ -188,6 +190,9 @@ function AppContentInner() {
       } else if (key === ',') {
         e.preventDefault();
         navigate('/settings');
+      } else if (key === '/') {
+        e.preventDefault();
+        setShowHelp((v) => !v);
       } else if (key === 'a' && e.shiftKey) {
         e.preventDefault();
         navigate('/account');
@@ -319,6 +324,48 @@ function AppContentInner() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/account" element={<Account app={app} onLogout={handleLogout} />} />
       </Routes>
+
+      {/* Shortcut cheat-sheet — Ctrl+/ toggles it. */}
+      {showHelp && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center"
+          onClick={() => setShowHelp(false)}
+        >
+          <div
+            role="dialog"
+            aria-label="Keyboard shortcuts"
+            className="w-96 max-w-[90vw] bg-surface border border-border rounded-card p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-title-3 text-foreground">Keyboard shortcuts</h2>
+              <button
+                onClick={() => setShowHelp(false)}
+                aria-label="Close shortcuts"
+                className="text-muted hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+            <dl className="space-y-2 text-sm">
+              {[
+                ['Ctrl + /', 'Show / hide this list'],
+                ['Ctrl + L', 'Lock vault'],
+                ['Ctrl + O', 'Import files'],
+                ['Ctrl + F', 'Search files'],
+                ['Ctrl + ,', 'Settings'],
+                ['Ctrl + Shift + A', 'Account'],
+                ['Ctrl + 1…4', 'Dashboard / Files / Backup / Settings'],
+              ].map(([keys, desc]) => (
+                <div key={keys} className="flex items-center justify-between gap-4">
+                  <dt className="font-mono text-[13px] text-accent">{keys}</dt>
+                  <dd className="text-muted text-right">{desc}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
