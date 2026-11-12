@@ -23,6 +23,7 @@ rusqlite = { version = "0.41", features = ["bundled"] }
 subtle = "2"
 tauri = { version = "2.10", features = [] }
 tauri-plugin-dialog = "2"
+tauri-plugin-single-instance = "2"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

@@ -4,6 +4,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::generate_context;
+use tauri::Manager;
 use std::sync::Arc;
 
 use veylora::auth::session::SessionManager;
@@ -342,6 +343,15 @@ fn main() {
     veylora::auth::auto_lock::spawn_watcher(manager.clone());
 
     tauri::Builder::default()
+        // Must be registered first: a duplicate launch focuses this instance
+        // instead of sharing vault/app-data state with a second copy.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.unminimize();
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .manage(manager.clone())
         .manage(app_auth)
