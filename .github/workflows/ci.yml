@@ -2,63 +2,58 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  # Full packaged build: compiles the release profile, validates tauri.conf
+  # (CSP schema) and produces the NSIS installer, exactly like a local
+  # `pnpm tauri build`.
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tauri build
+
   rust:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          node-version: 22
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
         with:
-          version: 8.15.9
-
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build frontend assets
-        run: pnpm build
-
-      - name: Run cargo test (workspace, non-ignored)
-        working-directory: ./src-tauri
-        run: cargo test --workspace
-
-      - name: Run cargo build --release
-        working-directory: ./src-tauri
-        run: cargo build --release
-
-  frontend:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 8.15.9
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run frontend tests
-        run: pnpm test
-
-      - name: Tauri build
-        run: pnpm tauri build
+          workspaces: src-tauri
+      # generate_context! embeds ../dist at compile time and fails if the
+      # path is missing; tests don't serve assets, so an empty dir is enough.
+      - run: New-Item -ItemType Directory -Force dist
+      # No `cargo fmt --check` gate: 49 files (incl. frozen crypto/storage/
+      # streaming/backup zones) are unformatted, and reformatting them is
+      # out of scope for v1.0. Clippy runs without -D warnings for the same
+      # reason: 26 of 28 style lints live in frozen zones.
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets
+      - run: cargo test --manifest-path src-tauri/Cargo.toml

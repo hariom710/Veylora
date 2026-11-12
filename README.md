@@ -34,7 +34,7 @@
 
 **Why Rust + Tauri.** Key material lives in RAM, so the platform matters. Rust gives memory safety plus zero-cost `zeroize` (keys are wiped the instant the vault locks); the RustCrypto crates supply Argon2id, XChaCha20-Poly1305 and HKDF with no C toolchain; `rusqlite` bundles SQLite so there is no system dependency. Tauri keeps the shell tiny — the installer is ~3.2 MB and the UI runs on Windows' preinstalled WebView2 instead of a bundled browser.
 
-**Maturity.** This is a **functional v1.0.0 suitable for personal use**: the NSIS installer builds, installs and launches; **168 Rust + 68 frontend tests pass**; and a full packaged-app smoke run (first-run wipe → login → vault creation → recovery → import → viewer render → lock → keypad unlock → dashboard counts) exits green on the final artifact. The security review is **internal** ([`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md)), not an external audit; the installer is unsigned; and known issues are listed under [Limitations](#-limitations-and-known-issues).
+**Maturity.** This is a **functional v1.0.0 suitable for personal use**: the NSIS installer builds, installs and launches; **168 Rust + 70 frontend tests pass**; and a full packaged-app smoke run (first-run wipe → login → vault creation → recovery → import → viewer render → lock → keypad unlock → dashboard counts) exits green on the final artifact. The security review is **internal** ([`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md)), not an external audit; the installer is unsigned; and known issues are listed under [Limitations](#-limitations-and-known-issues).
 
 **Deliberately out of scope:** cloud sync, incremental backup, and an auto-backup scheduler. Veylora is local-only by design.
 
@@ -236,7 +236,8 @@ pnpm tauri dev
 Quality checks (run from the repository root):
 
 ```powershell
-pnpm test                 # 68 frontend tests (Vitest + jsdom)
+pnpm typecheck            # tsc --noEmit — must report 0 errors
+pnpm test                 # 70 frontend tests (Vitest + jsdom)
 build.bat test            # 168 Rust tests, via the MSVC environment wrapper
 pnpm build                # production frontend bundle
 build.bat tauri build     # release binary + NSIS installer
@@ -245,8 +246,8 @@ build.bat tauri build     # release binary + NSIS installer
 Notes:
 
 - **`build.bat`** locates Visual Studio through `vswhere`, loads `vcvars64`, then runs `cargo` in `src-tauri\` — edit its `cd` path if your checkout lives elsewhere. Without a C++ toolchain it fails with an explicit error.
-- **`tsc --noEmit` is currently not a usable gate** — a pre-existing `ignoreDeprecations` config error makes it bail before checking files (see [Limitations](#-limitations-and-known-issues)).
-- **Icon gotcha:** after regenerating icons (`pnpm tauri icon app-icon.png`), **touch `src-tauri/build.rs`** before building. Cargo only re-runs the icon-embed script when it detects a change, and otherwise the exe silently keeps the old icon.
+- **`pnpm typecheck`** is a real gate (`tsc --noEmit`, 0 errors); CI runs it together with the tests on every push.
+- **Icons:** after regenerating (`pnpm tauri icon app-icon.png`) a rebuild picks them up automatically — `build.rs` hashes the icon folder and forces the embed to recompile. Only the Windows Explorer icon cache may lag (see [Troubleshooting](#-troubleshooting)).
 
 ---
 
@@ -292,16 +293,13 @@ Veylora is a **fully local application**: no accounts on any server, no analytic
 - **Encrypted metadata:** sensitive SQLite columns are individually AEAD-encrypted; the DB runs in WAL mode with `synchronous=FULL` and crash-safe temp+rename blob writes.
 - **No plaintext leaks:** no temp files, no preview caches; the only plaintext write is an explicit user export.
 - **Hardening surface:** minimal Tauri capabilities (no shell/fs plugins), no `innerHTML`/`eval`/`dangerouslySetInnerHTML` anywhere in the frontend (grepped).
+- **Content-Security-Policy:** the webview ships a restrictive CSP (`default-src 'self'`, no remote origins) scoped to the loopback `vault://` media origin, and a single-instance lock so a second launch focuses the running window instead of sharing vault state.
 
 **Known findings (open and disclosed)**
 
-1. **CSP is disabled** (`"csp": null` in `tauri.conf.json`). No injection sink exists today, but there is also no second wall — setting a real CSP is the first post-tag change.
-2. **Context menu can clip** at the viewport edge (positioned at raw pointer coordinates); every action still has a visible button.
-3. **Folder rename has no UI test** (the backend roundtrip is covered by Rust tests).
-4. **Context-menu accessibility:** Tab reaches all items; arrow-key navigation and Escape-to-close are missing.
-5. **No external audit** — [`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md) is an internal review.
-6. **Unsigned installer, no auto-update** — see the SHA-256 workflow in [Installation](#-installation).
-7. **Losing all three credentials** (PIN + password + recovery key) makes the vault permanently unrecoverable — by design.
+1. **No external audit** — [`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md) is an internal review.
+2. **Unsigned installer, no auto-update** — see the SHA-256 workflow in [Installation](#-installation).
+3. **Losing all three credentials** (PIN + password + recovery key) makes the vault permanently unrecoverable — by design.
 
 **Threat model.** Veylora protects data at rest against offline disk access and detects vault tampering. It does **not** protect against kernel-level malware, a compromised OS, coerced disclosure, or a compromised WebView2 — the full "protects / does not protect" list lives in [`RELEASE_NOTES.md`](RELEASE_NOTES.md).
 
@@ -313,11 +311,12 @@ Results from the full verification run (12 November 2026, Windows x64) — all f
 
 | Check | Result | Coverage limitation |
 |---|---|---|
-| `pnpm test` | **68/68 passed** (16 files) | jsdom component + unit tests; no real browser E2E |
+| `pnpm test` | **70/70 passed** (16 files) | jsdom component + unit tests; no real browser E2E |
 | `cargo test` | **168 passed, 0 failed, 2 ignored** | Offline and deterministic by design |
-| `tsc --noEmit` | ⚠️ Not a working gate — pre-existing config error; ~193 latent type errors behind it | Known issue #5 below |
+| `pnpm typecheck` (`tsc --noEmit`) | **0 errors** (193 latent errors were hidden behind a broken config flag) | — |
+| CI (`.github/workflows/ci.yml`) | Frontend: typecheck + tests + build (Ubuntu); Rust: clippy + tests and full packaged build (Windows) | `cargo fmt` and clippy `-D warnings` deliberately not gated — 49 files / 26 lints sit in frozen zones |
 | Packaged-app smoke (WebView2 CDP automation) | **Exit 0** on the final installer — first-run wipe → login → create vault → recovery → import → image viewer renders (64×64) → `vault://` fetch returns 200 → lock → keypad unlock → dashboard shows `1 files encrypted \| Storage: 492 B` | Run manually; the script holds machine-local paths and is not committed |
-| Installer SHA-256 | `eb383d00…ac33df` published in `RELEASE_NOTES.md` + `.sha256` sidecar | — |
+| Installer SHA-256 | `718f5e32…03549` published in `RELEASE_NOTES.md` + `.sha256` sidecar | — |
 | Icon embedding | Verified by extracting the icon from **both** the built and the installed exe | Manual |
 | Test-data hygiene | Test vault and WebView2 localStorage wiped after every smoke run | — |
 
@@ -327,35 +326,17 @@ Results from the full verification run (12 November 2026, Windows x64) — all f
 
 ## ⚠️ Limitations and known issues
 
-1. **CSP disabled** — `tauri.conf.json` sets `"csp": null`; no Content-Security-Policy applies to the webview (first post-tag fix).
-2. **Context menu viewport clipping** — right-click near the right/bottom edge can place the menu partially off-screen; visible buttons remain usable.
-3. **Folder rename lacks a UI test** — the right-click → rename-folder path has no frontend test (backend is covered).
-4. **Context-menu keyboard gaps** — Tab works, but arrow-key navigation and Escape-to-close are not implemented.
-5. **`tsc` gate broken** — the `ignoreDeprecations` config value is rejected by the installed TypeScript, so the type-checker bails before checking any file; ~193 latent type errors sit behind it. Vitest/esbuild strip types without checking.
-6. **No `LICENSE` files in the repo** — the license is *declared* (`MIT OR Apache-2.0` in `Cargo.toml`) but the license texts are not yet committed (roadmap).
-7. **No CI** — no `.github/workflows` yet; all verification above was run locally.
-8. **Windows-only** — WebView2, NSIS, and Windows path semantics; other operating systems are unsupported.
-9. **Distribution gaps** — no code signing (SmartScreen warning), no auto-update, no single-instance lock (two open copies would share the same app data).
-10. **Deferred by design** — Windows Hello unlock, Windows session-lock detection, incremental backup, auto-backup scheduler, and cloud sync are explicitly out of scope for v1.0 (see [Roadmap](#-roadmap) and `docs/SECURITY_REVIEW.md`).
-11. **Recovery-key loss** — if the PIN, password, and recovery key are all lost, the data is unrecoverable; this is a feature of the design, not a bug.
-12. **Icon cache / `build.rs` gotcha** — after changing icons, cargo must be forced to re-run `src-tauri/build.rs`, and Windows Explorer may keep showing the old icon until its cache refreshes.
+1. **Windows-only** — WebView2, NSIS, and Windows path semantics; other operating systems are unsupported.
+2. **Distribution gaps** — no code signing (SmartScreen warning) and no auto-update; verify the SHA-256 from `RELEASE_NOTES.md` after every download. A single-instance lock keeps two launches from sharing vault state.
+3. **Deferred by design** — Windows Hello unlock, Windows session-lock detection, incremental backup, auto-backup scheduler, and cloud sync are explicitly out of scope for v1.0 (see [Roadmap](#-roadmap) and `docs/SECURITY_REVIEW.md`).
+4. **Recovery-key loss** — if the PIN, password, and recovery key are all lost, the data is unrecoverable; this is a feature of the design, not a bug.
 
 ---
 
 ## 🗺 Roadmap
 
-### P0 — first change after the v1.0.0 tag
-
-- [ ] Set a real CSP (`default-src 'self'` + `vault:`/`http://vault.localhost` for media, `'unsafe-inline'` for style attributes) and re-run the packaged smoke — viewers depend on those schemes
-
 ### P1 — correctness and quality
 
-- [ ] Clamp the context menu to the viewport
-- [ ] Add the folder-rename UI test
-- [ ] Context-menu arrow-key navigation + Escape to close
-- [ ] Repair the `tsc` gate and clear the latent type errors
-- [ ] Commit `LICENSE-MIT` / `LICENSE-APACHE`
-- [ ] CI workflow running `pnpm test` + `cargo test` on push
 - [ ] Parameterize and commit the packaged-app smoke script
 
 ### P2 — platform (deferred from the security review)
@@ -373,14 +354,13 @@ Results from the full verification run (12 November 2026, Windows x64) — all f
 |---|---|---|
 | SmartScreen blocks the installer | The installer is unsigned | **More info → Run anyway**, after verifying the SHA-256 from `RELEASE_NOTES.md` |
 | Desktop/taskbar still shows the old icon | Windows icon cache lag | Right-click Desktop → **Refresh**, or restart Explorer |
-| exe keeps the old icon after `pnpm tauri icon` | cargo skipped the embed build script | Touch `src-tauri/build.rs` and rebuild |
+| exe keeps the old icon after `pnpm tauri icon` | build.rs now re-runs automatically | Rebuild; if only Explorer still lags, refresh the desktop icon cache |
 | Vault locks while you are reading | Auto-lock timer elapsed | Re-unlock; raise the timeout in **Settings** (1/5/15/30 min) |
 | Viewer shows 403 / goes blank after locking | Mid-stream lock (by design) | Unlock and reopen the file |
 | Forgot PIN or master password | — | Unlock with the **recovery key** (Settings shows the flow); if all three are lost, the vault is unrecoverable by design |
 | "Admin account is using the default password" banner | Seeded first-run account | **Settings → change password** |
 | `build.bat` reports no MSVC toolchain | Missing C++ build tools | Install VS Build Tools with *Desktop development with C++* + Windows SDK |
 | `pnpm test` fails to start | Dependencies not installed | `pnpm install` |
-| `tsc --noEmit` reports `TS5103` | Pre-existing broken config (known issue #5) | Not a gate yet — see Roadmap |
 | Import fails silently | Vault locked or disk full | Unlock the vault, check free space, and watch the toast/error banner on the Dashboard |
 | Backup restore refuses a file | Container from a different vault | Backups are bound to the originating MVK — restore only into the vault that created it |
 
@@ -393,6 +373,7 @@ When reporting a problem, include: app version (`RELEASE_NOTES.md` / installer n
 Issues and pull requests are welcome. Before submitting, make sure these pass locally:
 
 ```powershell
+pnpm typecheck
 pnpm test
 build.bat test
 pnpm build
@@ -411,10 +392,10 @@ Security-sensitive rules that must not regress:
 
 This project is dual-licensed, as declared in [`src-tauri/Cargo.toml`](src-tauri/Cargo.toml):
 
-- [MIT License](https://opensource.org/licenses/MIT), or
-- [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0)
+- [`LICENSE-MIT`](LICENSE-MIT) — MIT License, or
+- [`LICENSE-APACHE`](LICENSE-APACHE) — [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
-at your option. *(License texts are pending commit — see Roadmap.)*
+at your option.
 
 ---
 

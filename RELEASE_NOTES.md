@@ -35,7 +35,7 @@ initiates an export of a file to a location of their choice.
 2. Verify the SHA-256 hash matches the value published below:
 
    ```
-   SHA-256: eb383d00f20995fddf748be8cf99a5b52f77ef28b436203f67b6036067ac33df
+   SHA-256: 718f5e32e61b52d363d7f68bcaee89874e606237a7c461988b676bfaa9803549
    ```
 
    Verify with:
@@ -67,8 +67,6 @@ tampered with in transit.
   versions and verify the SHA-256 before installing.
 - **Windows session-lock**: Polling-based auto-lock on session lock is
   deferred to v1.1 due to Windows API limitations in the build environment.
-- **Real icons**: Placeholder icons are used in v1.0. Replace with
-  professional artwork before v1.1.
 - **Browser E2E**: Not run in v1.0. Backend end-to-end tests substitute for
   browser E2E testing.
 - **Recovery key loss**: If you lose all credentials (PIN, password, and
