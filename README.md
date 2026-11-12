@@ -317,7 +317,7 @@ Results from the full verification run (12 November 2026, Windows x64) — all f
 | `cargo test` | **168 passed, 0 failed, 2 ignored** | Offline and deterministic by design |
 | `tsc --noEmit` | ⚠️ Not a working gate — pre-existing config error; ~193 latent type errors behind it | Known issue #5 below |
 | Packaged-app smoke (WebView2 CDP automation) | **Exit 0** on the final installer — first-run wipe → login → create vault → recovery → import → image viewer renders (64×64) → `vault://` fetch returns 200 → lock → keypad unlock → dashboard shows `1 files encrypted \| Storage: 492 B` | Run manually; the script holds machine-local paths and is not committed |
-| Installer SHA-256 | `f2dd1f6e…8274002` published in `RELEASE_NOTES.md` + `.sha256` sidecar | — |
+| Installer SHA-256 | `eb383d00…ac33df` published in `RELEASE_NOTES.md` + `.sha256` sidecar | — |
 | Icon embedding | Verified by extracting the icon from **both** the built and the installed exe | Manual |
 | Test-data hygiene | Test vault and WebView2 localStorage wiped after every smoke run | — |
 

@@ -162,42 +162,19 @@ export default function Welcome({
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-6 py-12">
-      <h1 className="text-display text-foreground mb-12">Veylora</h1>
-      <div className="w-full max-w-md p-8 bg-surface border border-border rounded-card">
-        {recent.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-title-3 text-foreground mb-4">Open a vault</h2>
-            <div className="space-y-3">
-              {recent.map((p, i) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => handleRecent(p)}
-                  disabled={opening}
-                  className={`w-full text-left rounded-card border px-4 py-4 transition-colors ${
-                    i === 0
-                      ? 'border-accent bg-elevated hover:bg-elevated'
-                      : 'border-border bg-background/60 hover:border-muted-foreground'
-                  }`}
-                >
-                  <span className="block text-body font-medium text-foreground">
-                    {folderLabel(p)}
-                  </span>
-                  <span className="block truncate text-mono text-muted mt-1">{p}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <h2 className="text-title-2 text-foreground mb-6">Create Vault</h2>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-6 py-4">
+      <h1 className="text-display text-foreground mb-4">Veylora</h1>
+      {/* Two columns so both flows fit on one screen. Create stays first in
+          DOM: the smoke submits form[0] and expects Browse[0]/Browse[1]. */}
+      <div className="w-full max-w-5xl grid gap-6 md:grid-cols-2">
+        <div className="p-5 bg-surface border border-border rounded-card">
+        <h2 className="text-title-2 text-foreground mb-4">Create Vault</h2>
         {adminDefault && (
-          <div className="mb-4 p-3 rounded-input border border-warning/40 bg-warning/10 text-warning text-sm">
+          <div className="mb-3 p-3 rounded-input border border-warning/40 bg-warning/10 text-warning text-sm">
             Admin account is using the default password. Change it in Settings → Account.
           </div>
         )}
-        <form onSubmit={handleCreate} className="space-y-4">
+        <form onSubmit={handleCreate} className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="name">Vault Name</Label>
             <Input
@@ -269,8 +246,37 @@ export default function Welcome({
             {loading ? 'Creating...' : 'Create Vault'}
           </Button>
         </form>
+        </div>
 
-        <div className="mt-8 pt-6 border-t border-border">
+        <div className="p-5 bg-surface border border-border rounded-card">
+        {recent.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-title-3 text-foreground mb-4">Open a vault</h2>
+            <div className="space-y-3">
+              {recent.map((p, i) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => handleRecent(p)}
+                  disabled={opening}
+                  className={`w-full text-left rounded-card border px-4 py-4 transition-colors ${
+                    i === 0
+                      ? 'border-accent bg-elevated hover:bg-elevated'
+                      : 'border-border bg-background/60 hover:border-muted-foreground'
+                  }`}
+                >
+                  <span className="block text-body font-medium text-foreground">
+                    {folderLabel(p)}
+                  </span>
+                  <span className="block truncate text-mono text-muted mt-1">{p}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Divider only when recents sit above it — otherwise a bare line. */}
+        <div className={recent.length > 0 ? 'border-t border-border pt-6' : ''}>
           <h2 className="text-title-3 text-foreground mb-4">Open Existing Vault</h2>
           <form onSubmit={handleOpen} className="space-y-4">
             <div className="space-y-2">
@@ -297,6 +303,7 @@ export default function Welcome({
               {opening ? 'Opening...' : 'Open Vault'}
             </Button>
           </form>
+        </div>
         </div>
       </div>
     </div>
