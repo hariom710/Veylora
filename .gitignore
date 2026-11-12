@@ -1,7 +1,6 @@
 # Rust & Cargo
 target/
 **/target/
-Cargo.lock
 CACHEDIR.TAG
 .rustc_info.json
 
