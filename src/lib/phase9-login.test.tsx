@@ -66,18 +66,18 @@ describe('phase9 app login gate', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
-    appListUsers.mockResolvedValue({ ok: true, data: [] });
-    vaultGetSessionToken.mockResolvedValue({ ok: true, data: 'token_test' });
-    vaultStatus.mockResolvedValue({
+    vi.mocked(appListUsers).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(vaultGetSessionToken).mockResolvedValue({ ok: true, data: 'token_test' });
+    vi.mocked(vaultStatus).mockResolvedValue({
       ok: true,
       data: { locked: true, vault_id: null, file_count: 0, storage_used: 0, vault_open: false },
     });
     // Dashboard (main UI) screens call these at mount.
-    fileRecent.mockResolvedValue({ ok: true, data: [] });
-    fileFavorites.mockResolvedValue({ ok: true, data: [] });
-    vaultBackupHistory.mockResolvedValue({ ok: true, data: [] });
-    vaultActivity.mockResolvedValue({ ok: true, data: undefined });
-    autoLockSet.mockResolvedValue({ ok: true, data: undefined });
+    vi.mocked(fileRecent).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(fileFavorites).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(vaultBackupHistory).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(vaultActivity).mockResolvedValue({ ok: true, data: undefined });
+    vi.mocked(autoLockSet).mockResolvedValue({ ok: true, data: undefined });
   });
 
   afterEach(() => {
@@ -85,7 +85,7 @@ describe('phase9 app login gate', () => {
   });
 
   it('cold start shows Login, not the vault screens', async () => {
-    appStatus.mockResolvedValue({ ok: true, data: LOGGED_OUT });
+    vi.mocked(appStatus).mockResolvedValue({ ok: true, data: LOGGED_OUT });
 
     render(<App />);
 
@@ -95,8 +95,8 @@ describe('phase9 app login gate', () => {
   });
 
   it('successful login reaches the vault gate (Welcome)', async () => {
-    appStatus.mockResolvedValue({ ok: true, data: LOGGED_OUT });
-    appLogin.mockResolvedValue({ ok: true, data: LOGGED_IN });
+    vi.mocked(appStatus).mockResolvedValue({ ok: true, data: LOGGED_OUT });
+    vi.mocked(appLogin).mockResolvedValue({ ok: true, data: LOGGED_IN });
 
     render(<App />);
 
@@ -110,7 +110,7 @@ describe('phase9 app login gate', () => {
   });
 
   it('signup validates length and confirmation client-side', async () => {
-    appStatus.mockResolvedValue({ ok: true, data: LOGGED_OUT });
+    vi.mocked(appStatus).mockResolvedValue({ ok: true, data: LOGGED_OUT });
 
     render(<App />);
     await screen.findByText('Your Files. Your Privacy. Your Control.');
@@ -132,8 +132,8 @@ describe('phase9 app login gate', () => {
   });
 
   it('surfaces the server error for a duplicate email', async () => {
-    appStatus.mockResolvedValue({ ok: true, data: LOGGED_OUT });
-    appSignup.mockResolvedValue({
+    vi.mocked(appStatus).mockResolvedValue({ ok: true, data: LOGGED_OUT });
+    vi.mocked(appSignup).mockResolvedValue({
       ok: false,
       error: { type: 'Internal', message: 'Email already in use' },
     });
@@ -153,12 +153,12 @@ describe('phase9 app login gate', () => {
 
   it('logout returns to Login WITHOUT locking the vault', async () => {
     // Layer 1 passed, vault already unlocked: main app visible.
-    appStatus.mockResolvedValue({ ok: true, data: LOGGED_IN });
-    vaultStatus.mockResolvedValue({
+    vi.mocked(appStatus).mockResolvedValue({ ok: true, data: LOGGED_IN });
+    vi.mocked(vaultStatus).mockResolvedValue({
       ok: true,
       data: { locked: false, vault_id: 1, file_count: 0, storage_used: 0, vault_open: true },
     });
-    appLogout.mockResolvedValue({ ok: true, data: undefined });
+    vi.mocked(appLogout).mockResolvedValue({ ok: true, data: undefined });
 
     render(<App />);
 

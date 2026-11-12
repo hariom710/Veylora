@@ -66,8 +66,8 @@ export default function Settings() {
   const [status, setStatus] = useState<any>(null);
 
   useEffect(() => {
-    vaultStatus().then(({ ok, data }) => {
-      if (ok) setStatus(data);
+    vaultStatus().then((r) => {
+      if (r.ok) setStatus(r.data);
     });
   }, []);
 

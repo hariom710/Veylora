@@ -26,14 +26,14 @@ describe('Settings (Slice C)', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
-    vaultStatus.mockResolvedValue({
+    vi.mocked(vaultStatus).mockResolvedValue({
       ok: true,
       data: { locked: false, vault_id: 1, file_count: 3, storage_used: 2048, vault_open: true },
     });
-    autoLockSet.mockResolvedValue({ ok: true, data: undefined });
-    vaultChangePin.mockResolvedValue({ ok: true, data: undefined });
-    vaultChangePassword.mockResolvedValue({ ok: true, data: undefined });
-    vaultDelete.mockResolvedValue({ ok: true, data: undefined });
+    vi.mocked(autoLockSet).mockResolvedValue({ ok: true, data: undefined });
+    vi.mocked(vaultChangePin).mockResolvedValue({ ok: true, data: undefined });
+    vi.mocked(vaultChangePassword).mockResolvedValue({ ok: true, data: undefined });
+    vi.mocked(vaultDelete).mockResolvedValue({ ok: true, data: undefined });
   });
 
   afterEach(() => {

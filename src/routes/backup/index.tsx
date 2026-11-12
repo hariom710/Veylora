@@ -7,7 +7,7 @@ import {
   vaultBackupRestore,
   vaultBackupHistory,
 } from '@/lib/ipc';
-import type { BackupInfo, RestoreInfo, BackupHistoryEntry } from '@/lib/types';
+import { commandErrorMessage, type BackupInfo, type RestoreInfo, type BackupHistoryEntry } from '@/lib/types';
 import { save as saveDialog, open as openDialog } from '@tauri-apps/plugin-dialog';
 
 export default function Backup() {
@@ -24,7 +24,7 @@ export default function Backup() {
     if (result.ok) {
       setHistory(result.data);
     } else {
-      setMessage(`Failed to load history: ${result.error.message}`);
+      setMessage(`Failed to load history: ${commandErrorMessage(result.error)}`);
     }
   }
 
@@ -59,7 +59,7 @@ export default function Backup() {
         setMessage(`Backup created: ${result.data.file_count} files`);
         loadHistory();
       } else {
-        setMessage(`Backup failed: ${result.error.message}`);
+        setMessage(`Backup failed: ${commandErrorMessage(result.error)}`);
       }
     } finally {
       setLoading(false);
@@ -80,7 +80,7 @@ export default function Backup() {
           `Backup verified: ${result.data.file_count} files, verified: ${result.data.verified_fields.join(', ')}`,
         );
       } else {
-        setMessage(`Verification failed: ${result.error.message}`);
+        setMessage(`Verification failed: ${commandErrorMessage(result.error)}`);
       }
     } finally {
       setLoading(false);
@@ -102,7 +102,7 @@ export default function Backup() {
           `Restored: ${result.data.files_restored} files, ${result.data.bytes_written} bytes`,
         );
       } else {
-        setMessage(`Restore failed: ${result.error.message}`);
+        setMessage(`Restore failed: ${commandErrorMessage(result.error)}`);
       }
     } finally {
       setLoading(false);

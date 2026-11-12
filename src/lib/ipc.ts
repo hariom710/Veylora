@@ -11,6 +11,9 @@ import type {
   FileInfo,
   FolderInfo,
   Listing,
+  BackupInfo,
+  RestoreInfo,
+  BackupHistoryEntry,
 } from './types';
 
 type CommandMap = {
@@ -31,7 +34,8 @@ type CommandMap = {
     result: UnlockResult;
   };
   vault_unlock_recovery_cmd: {
-    args: { recovery_key: string };
+    // Tauri 2 default: Rust snake_case params are camelCase on the JS side.
+    args: { recoveryKey: string };
     result: UnlockResult;
   };
   vault_lock_cmd: {
@@ -145,6 +149,22 @@ type CommandMap = {
   vault_change_password_cmd: {
     args: { currentPassword: string; newPassword: string };
     result: void;
+  };
+  vault_backup_create_cmd: {
+    args: { destPath: string };
+    result: BackupInfo;
+  };
+  vault_backup_verify_cmd: {
+    args: { backupPath: string };
+    result: BackupInfo;
+  };
+  vault_backup_restore_cmd: {
+    args: { backupPath: string };
+    result: RestoreInfo;
+  };
+  vault_backup_history_cmd: {
+    args: {};
+    result: BackupHistoryEntry[];
   };
   vault_backup_history_clear_cmd: {
     args: {};

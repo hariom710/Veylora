@@ -12,8 +12,6 @@ vi.mock('@/lib/ipc', () => ({
 
 import {
   vaultUnlockPin,
-  vaultUnlockPassword,
-  vaultUnlockRecovery,
   vaultGetSessionToken,
 } from '@/lib/ipc';
 
@@ -22,7 +20,7 @@ describe('Unlock screen', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vaultGetSessionToken.mockResolvedValue({ ok: true, data: 'token123' });
+    vi.mocked(vaultGetSessionToken).mockResolvedValue({ ok: true, data: 'token123' });
   });
 
   it('renders PIN input by default', () => {
@@ -46,7 +44,7 @@ describe('Unlock screen', () => {
 
   it('unlocks with valid PIN', async () => {
     const user = userEvent.setup();
-    vaultUnlockPin.mockResolvedValue({ ok: true, data: { vault_id: 1, unlock_method: 'pin' } });
+    vi.mocked(vaultUnlockPin).mockResolvedValue({ ok: true, data: { vault_id: 1, unlock_method: 'pin' } });
     render(<Unlock onUnlock={mockOnUnlock} />);
 
     await user.type(screen.getByLabelText(/PIN/i), '1234');
@@ -57,18 +55,18 @@ describe('Unlock screen', () => {
 
   it('keypad digits fill the PIN and Backspace edits it', async () => {
     const user = userEvent.setup();
-    vaultUnlockPin.mockResolvedValue({ ok: true, data: { vault_id: 1, unlock_method: 'pin' } });
+    vi.mocked(vaultUnlockPin).mockResolvedValue({ ok: true, data: { vault_id: 1, unlock_method: 'pin' } });
     render(<Unlock onUnlock={mockOnUnlock} />);
 
     // Circular keypad: 1,2,3,4 → "1234", then Backspace → "123", then 5 → "1235".
     for (const d of ['1', '2', '3', '4']) {
-      await user.click(screen.getByRole('button', { name: d, exact: true }));
+      await user.click(screen.getByRole('button', { name: d }));
     }
     await user.click(screen.getByRole('button', { name: 'Backspace' }));
-    await user.click(screen.getByRole('button', { name: '5', exact: true }));
+    await user.click(screen.getByRole('button', { name: '5' }));
     await user.click(screen.getByRole('button', { name: 'Clear' }));
     for (const d of ['1', '2', '3', '4']) {
-      await user.click(screen.getByRole('button', { name: d, exact: true }));
+      await user.click(screen.getByRole('button', { name: d }));
     }
     await user.click(screen.getByRole('button', { name: /Unlock/i }));
 
@@ -78,7 +76,7 @@ describe('Unlock screen', () => {
 
   it('shows error for invalid PIN', async () => {
     const user = userEvent.setup();
-    vaultUnlockPin.mockRejectedValue(new Error('invalid credential'));
+    vi.mocked(vaultUnlockPin).mockRejectedValue(new Error('invalid credential'));
     render(<Unlock onUnlock={mockOnUnlock} />);
 
     await user.type(screen.getByLabelText(/PIN/i), 'wrong');

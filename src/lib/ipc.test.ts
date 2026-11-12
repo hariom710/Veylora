@@ -1,13 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   vaultCreate,
-  vaultOpen,
   vaultUnlockPin,
   vaultUnlockPassword,
   vaultUnlockRecovery,
   vaultLock,
   vaultStatus,
-  vaultGetMeta,
   vaultGetSessionToken,
   appLogin,
   fileImport,

@@ -38,8 +38,8 @@ export default function Dashboard() {
   }, []);
 
   async function loadStatus() {
-    const { data, ok } = await vaultStatus();
-    if (ok) setStatus(data);
+    const result = await vaultStatus();
+    if (result.ok) setStatus(result.data);
     setLoading(false);
   }
 

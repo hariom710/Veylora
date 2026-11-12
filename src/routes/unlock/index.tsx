@@ -29,8 +29,8 @@ export default function Unlock({ onUnlock }: { onUnlock: (method: string, value:
       else result = await vaultUnlockRecovery(value);
 
       if (result.ok) {
-        const { data: token } = await vaultGetSessionToken();
-        onUnlock(method, token || '');
+        const token = await vaultGetSessionToken();
+        onUnlock(method, token.ok ? token.data : '');
       } else {
         setError((result.error as any)?.message || 'Invalid credential');
       }

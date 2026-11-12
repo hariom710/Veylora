@@ -35,10 +35,10 @@ describe('Favorites (Slice C)', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    fileFavorites.mockResolvedValue({ ok: true, data: FIXTURE });
-    fileFavorite.mockResolvedValue({ ok: true, data: undefined });
-    fileExport.mockResolvedValue({ ok: true, data: 2048 });
-    saveDialog.mockResolvedValue('C:\\Users\\me\\Desktop\\starred.pdf');
+    vi.mocked(fileFavorites).mockResolvedValue({ ok: true, data: FIXTURE });
+    vi.mocked(fileFavorite).mockResolvedValue({ ok: true, data: undefined });
+    vi.mocked(fileExport).mockResolvedValue({ ok: true, data: 2048 });
+    vi.mocked(saveDialog).mockResolvedValue('C:\\Users\\me\\Desktop\\starred.pdf');
   });
 
   it('lists starred files', async () => {
@@ -52,7 +52,7 @@ describe('Favorites (Slice C)', () => {
   });
 
   it('unstars a file and refreshes the list', async () => {
-    fileFavorites.mockResolvedValueOnce({ ok: true, data: FIXTURE });
+    vi.mocked(fileFavorites).mockResolvedValueOnce({ ok: true, data: FIXTURE });
     render(
       <MemoryRouter>
         <Favorites token="tok" />
@@ -61,7 +61,7 @@ describe('Favorites (Slice C)', () => {
     await screen.findByText('starred.pdf');
 
     // After unstar, the refreshed list comes back empty.
-    fileFavorites.mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(fileFavorites).mockResolvedValue({ ok: true, data: [] });
     await user.click(screen.getByRole('button', { name: 'Unstar' }));
 
     expect(fileFavorite).toHaveBeenCalledWith(1, false);

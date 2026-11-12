@@ -20,7 +20,7 @@ const RECENT_KEY = 'veylora.recentVaults';
 const VAULT_PATH_KEY = 'veylora.vaultPath';
 
 const metaOk = (p: string) => ({
-  ok: true,
+  ok: true as const,
   data: { name: p, path: p, version: 1, kdf_params_public: 'null' },
 });
 
@@ -31,8 +31,8 @@ describe('Welcome — recent vaults and open flow', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
-    vaultGetMeta.mockImplementation((p: string) => Promise.resolve(metaOk(p)));
-    vaultOpen.mockResolvedValue({ ok: true, data: { name: 'v', path: 'p', vault_id: 1 } });
+    vi.mocked(vaultGetMeta).mockImplementation((p: string) => Promise.resolve(metaOk(p)));
+    vi.mocked(vaultOpen).mockResolvedValue({ ok: true, data: { name: 'v', path: 'p', vault_id: 1, recovery_key: '' } });
     (openDialog as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
   });
 
@@ -64,9 +64,11 @@ describe('Welcome — recent vaults and open flow', () => {
 
   it('drops a stale vault from the list on mount and persists the pruned list', async () => {
     window.localStorage.setItem(RECENT_KEY, JSON.stringify(['/gone', '/kept']));
-    vaultGetMeta.mockImplementation((p: string) =>
+    vi.mocked(vaultGetMeta).mockImplementation((p: string) =>
       Promise.resolve(
-        p === '/kept' ? metaOk(p) : { ok: false, error: { message: 'vault not found' } },
+        p === '/kept'
+          ? metaOk(p)
+          : { ok: false, error: { type: 'Internal', message: 'vault not found' } },
       ),
     );
 
@@ -129,7 +131,7 @@ describe('Welcome — recent vaults and open flow', () => {
 
   it('removes a row that fails to open instead of leaving a dead button', async () => {
     window.localStorage.setItem(RECENT_KEY, JSON.stringify(['/broken']));
-    vaultOpen.mockResolvedValue({ ok: false, error: { message: 'vault not found' } });
+    vi.mocked(vaultOpen).mockResolvedValue({ ok: false, error: { type: 'Internal', message: 'vault not found' } });
 
     render(<Welcome onCreated={onCreated} />);
 

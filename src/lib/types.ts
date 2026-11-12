@@ -111,3 +111,9 @@ export interface BackupHistoryEntry {
   status: string;
   created_at_unix: number;
 }
+
+/** Human-readable text for an IPC error; only `Internal` carries a message. */
+export function commandErrorMessage(error: CommandError): string {
+  if (error.type === 'Internal') return error.message;
+  return error.type === 'Locked' ? 'Vault is locked' : 'Vault not found at path';
+}

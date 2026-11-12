@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { vaultUrl } from '@/lib/vaultUrl';
 
 interface VideoPlayerProps {

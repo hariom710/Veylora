@@ -27,16 +27,16 @@ describe('first run (no vault open)', () => {
     vi.resetAllMocks();
     window.localStorage.clear();
     // Layer 1 already passed: this test is about the vault gate.
-    appStatus.mockResolvedValue({
+    vi.mocked(appStatus).mockResolvedValue({
       ok: true,
       data: { logged_in: true, email: 'a@b.co', role: 'user', logged_in_since: 1, used_default_password: false },
     });
-    vaultStatus.mockResolvedValue({
+    vi.mocked(vaultStatus).mockResolvedValue({
       ok: true,
       data: { locked: true, vault_id: null, file_count: 0, storage_used: 0, vault_open: false },
     });
     // Dashboard mounts in some tests and reads the last backup at mount.
-    vaultBackupHistory.mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(vaultBackupHistory).mockResolvedValue({ ok: true, data: [] });
   });
 
   it('shows Create Vault instead of Unlock when no vault is open', async () => {

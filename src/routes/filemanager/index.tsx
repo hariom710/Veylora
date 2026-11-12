@@ -87,6 +87,12 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
   const [moveFolders, setMoveFolders] = useState<FolderInfo[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  // Right-click menu: focus the first item so arrows work immediately.
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (menu) menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+  }, [menu]);
+
   const currentFolder = crumbs[crumbs.length - 1].id;
 
   async function load(folderId: number | null) {
@@ -581,8 +587,8 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
           </CardContent>
         </Card>
 
-        {/* Right-click menu — a pointer affordance only: every action here
-            also exists as a visible button, so keyboard users lose nothing. */}
+        {/* Right-click menu — a pointer affordance: every action also has a
+            visible button, and the menu supports arrows + Escape. */}
         {menu && (
           <>
             <div
@@ -594,9 +600,34 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
               }}
             />
             <div
+              ref={menuRef}
               role="menu"
+              tabIndex={-1}
+              onKeyDown={(e) => {
+                const items = Array.from(
+                  e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+                );
+                const current = items.indexOf(document.activeElement as HTMLElement);
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setMenu(null);
+                } else if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  items[current < 0 ? 0 : (current + 1) % items.length]?.focus();
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  items[
+                    current < 0 ? items.length - 1 : (current - 1 + items.length) % items.length
+                  ]?.focus();
+                }
+              }}
               className="fixed z-50 min-w-44 bg-surface border border-border rounded-input py-1"
-              style={{ left: menu.x, top: menu.y }}
+              // shortcut: fixed 248x208 size estimate to keep the menu on
+              // screen; use a measured clamp if items ever exceed ~5 rows.
+              style={{
+                left: Math.max(4, Math.min(menu.x, window.innerWidth - 248)),
+                top: Math.max(4, Math.min(menu.y, window.innerHeight - 208)),
+              }}
             >
               {menu.file ? (
                 <>

@@ -20,13 +20,13 @@ import { vaultStatus, fileRecent, fileFavorites, vaultBackupHistory } from '@/li
 describe('Dashboard', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    vaultStatus.mockResolvedValue({
+    vi.mocked(vaultStatus).mockResolvedValue({
       ok: true,
       data: { locked: false, vault_id: 1, file_count: 1, storage_used: 492, vault_open: true },
     });
-    fileRecent.mockResolvedValue({ ok: true, data: [] });
-    fileFavorites.mockResolvedValue({ ok: true, data: [] });
-    vaultBackupHistory.mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(fileRecent).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(fileFavorites).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(vaultBackupHistory).mockResolvedValue({ ok: true, data: [] });
   });
 
   // The release smoke matches these two strings on the rendered page —
@@ -42,7 +42,7 @@ describe('Dashboard', () => {
   });
 
   it('lists recent files with their size', async () => {
-    fileRecent.mockResolvedValue({
+    vi.mocked(fileRecent).mockResolvedValue({
       ok: true,
       data: [
         {

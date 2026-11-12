@@ -24,7 +24,7 @@ import {
   vaultActivity,
   autoLockSet,
 } from '@/lib/ipc';
-import { CommandError, AppStatus } from '@/lib/types';
+import { AppStatus } from '@/lib/types';
 
 // Last opened vault path. In-memory backend state (current_path) does not
 // survive restart or lock, so the UI re-opens it before unlock.
@@ -95,13 +95,14 @@ function AppContentInner() {
   }
 
   async function checkStatus() {
-    const { data, ok } = await vaultStatus();
-    if (ok) {
+    const status = await vaultStatus();
+    if (status.ok) {
+      const data = status.data;
       setHasOpenVault(data.vault_open);
       setIsLocked(data.locked);
       if (!data.locked && data.vault_id != null) {
-        const { data: token } = await vaultGetSessionToken();
-        if (token) setSessionToken(token);
+        const token = await vaultGetSessionToken();
+        if (token.ok && token.data) setSessionToken(token.data);
       }
     }
   }
@@ -142,8 +143,8 @@ function AppContentInner() {
 
   async function handleRecoveryContinue() {
     setPendingRecovery(null);
-    const { data: token } = await vaultGetSessionToken();
-    if (token) setSessionToken(token);
+    const token = await vaultGetSessionToken();
+    if (token.ok && token.data) setSessionToken(token.data);
     setIsLocked(false);
   }
 

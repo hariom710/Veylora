@@ -38,18 +38,18 @@ describe('phase6_token_rotates_after_lock_unlock', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     // Layer 1 already passed: this test is about the vault session.
-    appStatus.mockResolvedValue({
+    vi.mocked(appStatus).mockResolvedValue({
       ok: true,
       data: { logged_in: true, email: 'a@b.co', role: 'user', logged_in_since: 1, used_default_password: false },
     });
     // Model an existing vault whose path the UI remembers across lock/unlock.
     window.localStorage.setItem('veylora.vaultPath', '/test/vault');
-    vaultOpen.mockResolvedValue({ ok: true, data: { name: 'test', path: '/test/vault', vault_id: 1 } });
-    vaultStatus.mockResolvedValue({ ok: true, data: { locked: true, vault_id: null, file_count: 0, storage_used: 0, vault_open: true } });
-    fileRecent.mockResolvedValue({ ok: true, data: [] });
-    fileFavorites.mockResolvedValue({ ok: true, data: [] });
-    vaultBackupHistory.mockResolvedValue({ ok: true, data: [] });
-    vaultActivity.mockResolvedValue({ ok: true, data: undefined });
+    vi.mocked(vaultOpen).mockResolvedValue({ ok: true, data: { name: 'test', path: '/test/vault', vault_id: 1, recovery_key: '' } });
+    vi.mocked(vaultStatus).mockResolvedValue({ ok: true, data: { locked: true, vault_id: null, file_count: 0, storage_used: 0, vault_open: true } });
+    vi.mocked(fileRecent).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(fileFavorites).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(vaultBackupHistory).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(vaultActivity).mockResolvedValue({ ok: true, data: undefined });
   });
 
   afterEach(() => {
@@ -58,8 +58,8 @@ describe('phase6_token_rotates_after_lock_unlock', () => {
 
   it('token rotates after lock and unlock cycle', async () => {
     // First unlock: returns token_1
-    vaultUnlockPin.mockResolvedValue({ ok: true, data: { vault_id: 1, unlock_method: 'pin' } });
-    vaultGetSessionToken.mockResolvedValue({ ok: true, data: 'token_1' });
+    vi.mocked(vaultUnlockPin).mockResolvedValue({ ok: true, data: { vault_id: 1, unlock_method: 'pin' } });
+    vi.mocked(vaultGetSessionToken).mockResolvedValue({ ok: true, data: 'token_1' });
 
     render(<App />);
 
@@ -78,15 +78,15 @@ describe('phase6_token_rotates_after_lock_unlock', () => {
     expect(vaultUnlockPin).toHaveBeenCalledWith('1234');
 
     // Lock the vault
-    vaultLock.mockResolvedValue({ ok: true, data: undefined });
+    vi.mocked(vaultLock).mockResolvedValue({ ok: true, data: undefined });
     await user.click(screen.getByRole('button', { name: /Lock Vault/i }));
 
     // Should return to Unlock screen
     expect(screen.getByText(/Unlock Vault/i)).toBeInTheDocument();
 
     // Second unlock with different token
-    vaultUnlockPin.mockResolvedValue({ ok: true, data: { vault_id: 1, unlock_method: 'pin' } });
-    vaultGetSessionToken.mockResolvedValue({ ok: true, data: 'token_2' });
+    vi.mocked(vaultUnlockPin).mockResolvedValue({ ok: true, data: { vault_id: 1, unlock_method: 'pin' } });
+    vi.mocked(vaultGetSessionToken).mockResolvedValue({ ok: true, data: 'token_2' });
 
     await user.type(screen.getByLabelText(/PIN/i), '1234');
     await user.click(screen.getByRole('button', { name: /Unlock/i }));

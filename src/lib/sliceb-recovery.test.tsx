@@ -81,18 +81,18 @@ describe('Slice B: create vault → recovery key → dashboard', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     window.localStorage.clear();
-    appStatus.mockResolvedValue({ ok: true, data: LOGGED_OUT });
-    appLogin.mockResolvedValue({ ok: true, data: LOGGED_IN });
+    vi.mocked(appStatus).mockResolvedValue({ ok: true, data: LOGGED_OUT });
+    vi.mocked(appLogin).mockResolvedValue({ ok: true, data: LOGGED_IN });
     // Fresh install: no vault open yet.
-    vaultStatus.mockResolvedValue({
+    vi.mocked(vaultStatus).mockResolvedValue({
       ok: true,
       data: { locked: true, vault_id: null, file_count: 0, storage_used: 0, vault_open: false },
     });
-    vaultGetSessionToken.mockResolvedValue({ ok: true, data: 'token_1' });
-    fileRecent.mockResolvedValue({ ok: true, data: [] });
-    fileFavorites.mockResolvedValue({ ok: true, data: [] });
-    vaultBackupHistory.mockResolvedValue({ ok: true, data: [] });
-    vaultActivity.mockResolvedValue({ ok: true, data: undefined });
+    vi.mocked(vaultGetSessionToken).mockResolvedValue({ ok: true, data: 'token_1' });
+    vi.mocked(fileRecent).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(fileFavorites).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(vaultBackupHistory).mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(vaultActivity).mockResolvedValue({ ok: true, data: undefined });
   });
 
   afterEach(() => {
@@ -100,7 +100,7 @@ describe('Slice B: create vault → recovery key → dashboard', () => {
   });
 
   it('shows the recovery key exactly once after creation, gated by the checkbox', async () => {
-    vaultCreate.mockResolvedValue({
+    vi.mocked(vaultCreate).mockResolvedValue({
       ok: true,
       data: { name: 'Personal', path: 'C:\\Vaults\\Personal', vault_id: 1, recovery_key: RECOVERY_KEY },
     });

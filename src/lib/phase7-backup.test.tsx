@@ -13,21 +13,20 @@ vi.mock('@/lib/ipc', () => ({
 import {
   vaultBackupCreate,
   vaultBackupVerify,
-  vaultBackupRestore,
   vaultBackupHistory,
 } from '@/lib/ipc';
 
 describe('Backup screen', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    vaultBackupHistory.mockResolvedValue({
+    vi.mocked(vaultBackupHistory).mockResolvedValue({
       ok: true,
       data: [],
     });
   });
 
   it('renders history from mocked vault_backup_history', async () => {
-    vaultBackupHistory.mockResolvedValue({
+    vi.mocked(vaultBackupHistory).mockResolvedValue({
       ok: true,
       data: [
         { path: '/backups/vault-2026.vey', status: 'complete', created_at_unix: 1000 },
@@ -45,7 +44,7 @@ describe('Backup screen', () => {
   });
 
   it('calls vault_backup_create with selected path on create', async () => {
-    vaultBackupCreate.mockResolvedValue({
+    vi.mocked(vaultBackupCreate).mockResolvedValue({
       ok: true,
       data: {
         path: '/backups/test.vey',
@@ -69,7 +68,7 @@ describe('Backup screen', () => {
   });
 
   it('shows corrupted backup error from vault_backup_verify', async () => {
-    vaultBackupVerify.mockResolvedValue({
+    vi.mocked(vaultBackupVerify).mockResolvedValue({
       ok: false,
       error: { type: 'Internal', message: 'manifest hash mismatch' },
     });

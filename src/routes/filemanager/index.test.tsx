@@ -31,6 +31,7 @@ import {
   fileFavorites,
   fileMove,
   folderList,
+  folderRename,
 } from '@/lib/ipc';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 
@@ -52,11 +53,11 @@ function renderManager(onLock = vi.fn()) {
 describe('FileManager', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    fileList.mockResolvedValue({
+    vi.mocked(fileList).mockResolvedValue({
       ok: true,
       data: { files: FIXTURE_FILES, folders: [] },
     });
-    fileFavorites.mockResolvedValue({ ok: true, data: [] });
+    vi.mocked(fileFavorites).mockResolvedValue({ ok: true, data: [] });
   });
 
   it('renders file list', async () => {
@@ -89,8 +90,8 @@ describe('FileManager', () => {
     renderManager();
     await screen.findByText(/document\.pdf/i);
 
-    openDialog.mockResolvedValue(['/tmp/p1.pdf', '/tmp/v1.mp4']);
-    fileImport.mockResolvedValue({ ok: true, data: [{ id: 4 }, { id: 5 }] });
+    vi.mocked(openDialog).mockResolvedValue(['/tmp/p1.pdf', '/tmp/v1.mp4']);
+    vi.mocked(fileImport).mockResolvedValue({ ok: true, data: [{ id: 4 }, { id: 5 }] } as any);
 
     await user.click(screen.getByTestId('import-button'));
 
@@ -107,7 +108,7 @@ describe('FileManager', () => {
     renderManager();
     await screen.findByText(/document\.pdf/i);
 
-    fileDelete.mockResolvedValue({ ok: true, data: undefined });
+    vi.mocked(fileDelete).mockResolvedValue({ ok: true, data: undefined });
     await user.click(screen.getAllByRole('button', { name: /Delete/i })[0]);
 
     expect(fileDelete).toHaveBeenCalledWith(1);
@@ -117,7 +118,7 @@ describe('FileManager', () => {
   it('renames through the right-click context menu', async () => {
     const user = userEvent.setup();
     const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('new-name.pdf');
-    fileRename.mockResolvedValue({ ok: true, data: undefined });
+    vi.mocked(fileRename).mockResolvedValue({ ok: true, data: undefined });
     renderManager();
     await screen.findByText(/document\.pdf/i);
 
@@ -128,13 +129,34 @@ describe('FileManager', () => {
     promptSpy.mockRestore();
   });
 
+  it('renames a folder through the right-click context menu', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fileList).mockResolvedValue({
+      ok: true,
+      data: {
+        files: [],
+        folders: [{ id: 7, parent_id: null, name: 'Docs', created_at: '0' }],
+      },
+    });
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Renamed');
+    vi.mocked(folderRename).mockResolvedValue({ ok: true, data: undefined });
+    renderManager();
+    await screen.findByText('Docs');
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: /Docs/ }), { clientX: 10, clientY: 20 });
+    await user.click(await screen.findByRole('menuitem', { name: 'Rename folder…' }));
+
+    expect(folderRename).toHaveBeenCalledWith(7, 'Renamed');
+    promptSpy.mockRestore();
+  });
+
   it('moves a file into a folder through the context menu', async () => {
     const user = userEvent.setup();
-    folderList.mockResolvedValue({
+    vi.mocked(folderList).mockResolvedValue({
       ok: true,
       data: [{ id: 7, parent_id: null, name: 'Docs', created_at: '0' }],
     });
-    fileMove.mockResolvedValue({ ok: true, data: undefined });
+    vi.mocked(fileMove).mockResolvedValue({ ok: true, data: undefined });
     renderManager();
     await screen.findByText(/document\.pdf/i);
 
@@ -157,13 +179,31 @@ describe('FileManager', () => {
     await user.click(screen.getByLabelText('Select video.mp4'));
     expect(screen.getByTestId('selected-count').textContent).toBe('2 selected');
 
-    fileDelete.mockResolvedValue({ ok: true, data: undefined });
+    vi.mocked(fileDelete).mockResolvedValue({ ok: true, data: undefined });
     await user.click(screen.getByRole('button', { name: 'Delete selected' }));
 
     expect(fileDelete).toHaveBeenCalledTimes(2);
     expect(fileDelete).toHaveBeenCalledWith(1);
     expect(fileDelete).toHaveBeenCalledWith(2);
     confirmSpy.mockRestore();
+  });
+
+  it('context menu supports arrow keys and closes on Escape', async () => {
+    const user = userEvent.setup();
+    renderManager();
+    await screen.findByText(/document\.pdf/i);
+
+    fireEvent.contextMenu(screen.getByTestId('file-row-1'), { clientX: 10, clientY: 20 });
+    await screen.findByRole('menu');
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Rename…' }));
+
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Export…' }));
+    await user.keyboard('{ArrowUp}');
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Rename…' }));
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
   it('shows a search-specific empty state instead of the folder message', async () => {

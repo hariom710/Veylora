@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { vaultUrl } from '@/lib/vaultUrl';
 import { vaultFetch } from '@/lib/vaultFetch';
 import { LockedModal } from '@/components/ui/locked-modal';
@@ -12,7 +12,7 @@ interface PDFViewerProps {
 }
 
 export default function PDFViewer({ token, onLock }: PDFViewerProps) {
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
   // Hex blob id from /viewer/pdf/:fileId (File Manager navigation).
   const { fileId = '' } = useParams();
   const [isLocked, setIsLocked] = useState(false);
