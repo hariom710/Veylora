@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Login from './routes/login';
 import RecoveryKey from './routes/recovery';
 import Welcome from './routes/welcome';
@@ -231,6 +232,27 @@ function AppContentInner() {
     <div className="min-h-screen bg-background text-foreground">
       <nav className="border-b border-border bg-surface/80 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-6">
+          {/* History back/forward: a no-op when there is nothing to traverse. */}
+          <div className="-ml-1 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              aria-label="Back"
+              title="Back"
+              className="rounded-button p-1.5 text-muted transition-colors hover:bg-white/5 hover:text-foreground"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(1)}
+              aria-label="Forward"
+              title="Forward"
+              className="rounded-button p-1.5 text-muted transition-colors hover:bg-white/5 hover:text-foreground"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
           <h1 className="text-title-3 text-foreground">Veylora</h1>
           <NavLink
             to="/"
@@ -300,7 +322,7 @@ function AppContentInner() {
       </nav>
 
       <Routes>
-        <Route path="/" element={<Dashboard sessionToken={sessionToken} />} />
+        <Route path="/" element={<Dashboard />} />
         <Route path="/welcome" element={<Welcome onCreated={handleVaultCreated} />} />
         <Route
           path="/filemanager"

@@ -1,18 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { FileText, HardDrive, History, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { vaultStatus, fileImport, fileRecent, fileFavorites, vaultBackupHistory } from '@/lib/ipc';
 import { onFilesDropped } from '@/lib/dragDrop';
 import { formatBytes } from '@/lib/format';
 import type { FileInfo } from '@/lib/types';
 
-interface DashboardProps {
-  sessionToken: string | null;
-}
-
-export default function Dashboard({ sessionToken }: DashboardProps) {
+export default function Dashboard() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -37,6 +34,7 @@ export default function Dashboard({ sessionToken }: DashboardProps) {
         setLastBackup(new Date(r.data[0].created_at_unix * 1000).toLocaleString());
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadStatus() {
@@ -73,10 +71,42 @@ export default function Dashboard({ sessionToken }: DashboardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function statCard(icon: ReactNode, label: string, value: string, note: string) {
+    return (
+      <Card>
+        <CardHeader>
+          <span className="flex h-9 w-9 items-center justify-center rounded-input bg-accent/15 text-accent">
+            {icon}
+          </span>
+          <span className="text-caption text-muted-foreground">{label}</span>
+        </CardHeader>
+        <CardContent>
+          <p className="text-title-2 text-foreground">{value}</p>
+          <p className="mt-1 text-caption text-muted-foreground">{note}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  function fileRows(files: FileInfo[]) {
+    return files.map((file) => (
+      <div
+        key={file.id}
+        className="flex items-center gap-3 rounded-input px-3 py-2 transition-colors hover:bg-elevated"
+      >
+        <FileText size={16} className="shrink-0 text-muted" />
+        <span className="truncate text-sm text-foreground">{file.filename}</span>
+        <span className="ml-auto shrink-0 text-caption text-muted-foreground">
+          {formatBytes(file.encrypted_size)}
+        </span>
+      </div>
+    ));
+  }
+
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
+        <div className="mb-8 flex items-center justify-between">
           <h1 className="text-title-1">Dashboard</h1>
           <Button variant="outline" onClick={() => loadStatus()}>
             Refresh
@@ -99,97 +129,73 @@ export default function Dashboard({ sessionToken }: DashboardProps) {
             {/* Stat cards (Phase 2 brief): counts from vault_status, last
                 backup from vault_backup_history. No welcome copy — the
                 numbers are the headline. */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card>
-                <CardContent>
-                  <div className="text-caption text-muted-foreground">Files</div>
-                  <p className="mt-1 text-title-2 text-foreground">
-                    {`${status?.file_count ?? 0} files encrypted`}
-                  </p>
-                  <p className="text-caption text-muted-foreground mt-1">
-                    {status?.locked ? 'Vault locked' : 'Vault unlocked'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent>
-                  <div className="text-caption text-muted-foreground">Storage</div>
-                  <p className="mt-1 text-title-2 text-foreground">
-                    {`Storage: ${formatBytes(status?.storage_used ?? 0)}`}
-                  </p>
-                  <p className="text-caption text-muted-foreground mt-1">Encrypted at rest</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent>
-                  <div className="text-caption text-muted-foreground">Last backup</div>
-                  <p className="mt-1 text-title-2 text-foreground">{lastBackup}</p>
-                  <p className="text-caption text-muted-foreground mt-1">Manual backups only</p>
-                </CardContent>
-              </Card>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+              {statCard(
+                <FileText size={18} />,
+                'Files',
+                `${status?.file_count ?? 0} files encrypted`,
+                status?.locked ? 'Vault locked' : 'Vault unlocked',
+              )}
+              {statCard(
+                <HardDrive size={18} />,
+                'Storage',
+                `Storage: ${formatBytes(status?.storage_used ?? 0)}`,
+                'Encrypted at rest',
+              )}
+              {statCard(
+                <History size={18} />,
+                'Last backup',
+                lastBackup,
+                'Manual backups only',
+              )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-              <Card>
-                <CardContent>
-                  <CardTitle>Quick Import</CardTitle>
-                  <Button className="w-full" onClick={handleImport} disabled={busy}>
-                    {busy ? 'Importing...' : 'Import Files'}
-                  </Button>
-                  <Button
-                    className="w-full mt-2"
-                    variant="outline"
-                    onClick={() => navigate('/filemanager')}
-                  >
-                    Browse Files
-                  </Button>
-                  <div className="mt-4 border border-dashed border-border rounded-card p-4 text-center text-caption text-muted-foreground">
-                    Drag files here to import
+
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>Quick Import</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col gap-4 md:flex-row">
+                  <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-input border border-dashed border-border py-10 text-muted-foreground">
+                    <Upload size={20} />
+                    <span className="text-sm">Drag files here to import</span>
                   </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent>
-                  <CardTitle>Session</CardTitle>
-                  <p className="text-muted text-sm">
-                    Vault: {status?.locked ? 'Locked' : 'Unlocked'}
-                  </p>
-                  <p className="text-muted text-sm mt-1">
-                    Token: {sessionToken ? 'active' : 'none'}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
+                  <div className="flex flex-col gap-2 md:w-52">
+                    <Button onClick={handleImport} disabled={busy}>
+                      {busy ? 'Importing...' : 'Import Files'}
+                    </Button>
+                    <Button variant="outline" onClick={() => navigate('/filemanager')}>
+                      Browse Files
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </>
         )}
 
         {!loading && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
             <Card>
-              <CardContent>
+              <CardHeader>
                 <CardTitle>Recent</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1">
                 {recent.length === 0 && (
                   <p className="text-muted-foreground text-sm">Nothing imported yet</p>
                 )}
-                {recent.map((file) => (
-                  <div key={file.id} className="flex justify-between text-sm py-1">
-                    <span className="text-foreground truncate mr-2">{file.filename}</span>
-                    <span className="text-muted-foreground">{formatBytes(file.encrypted_size)}</span>
-                  </div>
-                ))}
+                {fileRows(recent)}
               </CardContent>
             </Card>
             <Card>
-              <CardContent>
+              <CardHeader>
                 <CardTitle>Favorites</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1">
                 {favorites.length === 0 && (
                   <p className="text-muted-foreground text-sm">No starred files yet</p>
                 )}
-                {favorites.map((file) => (
-                  <div key={file.id} className="flex justify-between text-sm py-1">
-                    <span className="text-foreground truncate mr-2">{file.filename}</span>
-                    <span className="text-muted-foreground">{formatBytes(file.encrypted_size)}</span>
-                  </div>
-                ))}
+                {fileRows(favorites)}
               </CardContent>
             </Card>
           </div>
