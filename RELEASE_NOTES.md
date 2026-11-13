@@ -2,7 +2,7 @@
 
 ## Release Date
 
-2026-11-12
+2026-11-13
 
 ## What is Veylora?
 
@@ -63,8 +63,6 @@ tampered with in transit.
   are the supported unlock methods.
 - **Auto-update**: Not available in v1.0. Check GitHub Releases for new
   versions and verify the SHA-256 before installing.
-- **Browser E2E**: Not run in v1.0. Backend end-to-end tests substitute for
-  browser E2E testing.
 - **Recovery key loss**: If you lose all credentials (PIN, password, and
   recovery key), your data is permanently unrecoverable. Back up your
   recovery key in a safe place.

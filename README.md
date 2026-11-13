@@ -106,7 +106,7 @@
 | [getrandom](https://docs.rs/getrandom) | 0.2 | OS CSPRNG for all key material | Runtime |
 | [rusqlite](https://docs.rs/rusqlite) (bundled) | 0.41 | Metadata DB (WAL + `synchronous=FULL`) | Runtime |
 | serde / serde_json | 1 | (De)serialization | Runtime |
-| [Vitest](https://vitest.dev) + jsdom | ^5.1 | Frontend tests (68) | Test |
+| [Vitest](https://vitest.dev) + jsdom | ^5.1 | Frontend tests (70) | Test |
 | Node.js / pnpm | v22.21.1 / 8.15.9 | Tooling, build scripts | Build |
 | NSIS (via Tauri bundler) | — | Per-user Windows installer | Build |
 
@@ -311,7 +311,7 @@ Results from the full verification run (12–13 November 2026, Windows x64) - al
 
 | Check | Result | Coverage limitation |
 |---|---|---|
-| `pnpm test` | **70/70 passed** (16 files) | jsdom component + unit tests; no real browser E2E |
+| `pnpm test` | **70/70 passed** (16 files) | jsdom component + unit tests; real-browser E2E covered by the packaged smoke row below |
 | `cargo test` | **168 passed, 0 failed, 2 ignored** | Offline and deterministic by design |
 | `pnpm typecheck` (`tsc --noEmit`) | **0 errors** (193 latent errors were hidden behind a broken config flag) | — |
 | CI (`.github/workflows/ci.yml`) | Frontend: typecheck + lint + tests + build (Ubuntu); Rust: `fmt --check` + clippy `-D warnings` + tests; Windows: full packaged build **+ installed-app CDP smoke (browser E2E)** | — |
