@@ -4,6 +4,11 @@ on:
   push:
     tags: ['v*']
 
+# Creates the release and uploads assets; newer repos default the
+# GITHUB_TOKEN to read-only, which would fail both.
+permissions:
+  contents: write
+
 jobs:
   build-and-sign:
     runs-on: windows-latest
@@ -13,13 +18,15 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+      # Same pinned toolchain as ci.yml: lockfileVersion 6.0 needs pnpm 8,
+      # which corepack's unpinned default does not guarantee.
+      - uses: pnpm/action-setup@v4
         with:
-          node-version: '20'
-
-      - name: Install pnpm
-        run: corepack enable
+          version: 8.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -30,9 +37,12 @@ jobs:
       - name: Compute SHA-256 of installer
         id: hash
         run: |
-          $installer = Get-ChildItem -Path src-tauri\target\release\bundle\msi\* -File | Select-Object -First 1
-          if (-not $installer) { $installer = Get-ChildItem -Path src-tauri\target\release\bundle\nsis\* -File | Select-Object -First 1 }
+          $installer = Get-ChildItem -Path src-tauri\target\release\bundle\nsis\* -File | Select-Object -First 1
+          if (-not $installer) { $installer = Get-ChildItem -Path src-tauri\target\release\bundle\msi\* -File | Select-Object -First 1 }
           $hash = Get-FileHash -Algorithm SHA256 $installer.FullName | Select-Object -ExpandProperty Hash
+          # The bundler emits no sidecar; write one so the release ships a
+          # hash file matching the attached asset.
+          Set-Content -Path "$($installer.FullName).sha256" -Value "$hash  $($installer.Name)" -NoNewline -Encoding ascii
           echo "hash=$hash" >> $env:GITHUB_OUTPUT
           echo "installer=$($installer.Name)" >> $env:GITHUB_OUTPUT
 
@@ -54,7 +64,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref }}
-          name: Veylora ${{ github.ref }}
+          name: Veylora ${{ github.ref_name }}
           body: |
             See RELEASE_NOTES.md for full release notes.
             Installer SHA-256: ${{ steps.hash.outputs.hash }}

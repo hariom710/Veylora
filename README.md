@@ -198,7 +198,7 @@ The production build produces a per-user NSIS installer (no admin rights require
 src-tauri\target\release\bundle\nsis\Veylora_1.0.0_x64-setup.exe   (~3.2 MB)
 ```
 
-> This is a **local build output path**. Published releases land on the GitHub Releases page together with `RELEASE_NOTES.md`, which contains the expected **SHA-256** of the installer — always verify it before running:
+> This is a **local build output path**. Published releases land on the GitHub Releases page, where each release description prints the expected **SHA-256** of the attached installer (also shipped as a `.sha256` sidecar) — always verify it before running:
 >
 > ```powershell
 > certutil -hashfile Veylora_1.0.0_x64-setup.exe SHA256
@@ -316,7 +316,7 @@ Results from the full verification run (12–13 November 2026, Windows x64) - al
 | `pnpm typecheck` (`tsc --noEmit`) | **0 errors** (193 latent errors were hidden behind a broken config flag) | — |
 | CI (`.github/workflows/ci.yml`) | Frontend: typecheck + lint + tests + build (Ubuntu); Rust: `fmt --check` + clippy `-D warnings` + tests; Windows: full packaged build **+ installed-app CDP smoke (browser E2E)** | — |
 | Packaged-app smoke (WebView2 CDP automation) | **Exit 0** on the final installer — first-run wipe → login → create vault → recovery → import → image viewer renders (64×64) → `vault://` fetch returns 200 → lock → keypad unlock → dashboard shows `1 files encrypted \| Storage: 494 B` | Committed as [`scripts/smoke.ps1`](scripts/smoke.ps1) (parameterized exe path, vault, creds, port, shot dir; asserts and non-zero exit on failure); run manually against the installed app |
-| Installer SHA-256 | `f84a3399…8f1c` published in `RELEASE_NOTES.md` + `.sha256` sidecar | — |
+| Installer SHA-256 | `f84a3399…8f1c` for the locally verified build; each GitHub Release prints the hash of the asset it ships (plus a `.sha256` sidecar) | — |
 | Icon embedding | Verified by extracting the icon from **both** the built and the installed exe | Manual |
 | Test-data hygiene | Test vault and WebView2 localStorage wiped after every smoke run | — |
 
@@ -327,7 +327,7 @@ Results from the full verification run (12–13 November 2026, Windows x64) - al
 ## ⚠️ Limitations and known issues
 
 1. **Windows-only** — WebView2, NSIS, and Windows path semantics; other operating systems are unsupported.
-2. **Distribution gaps** — no code signing (SmartScreen warning) and no auto-update; verify the SHA-256 from `RELEASE_NOTES.md` after every download. A single-instance lock keeps two launches from sharing vault state.
+2. **Distribution gaps** — no code signing (SmartScreen warning) and no auto-update; verify the SHA-256 shown on the GitHub Release page after every download. A single-instance lock keeps two launches from sharing vault state.
 3. **Deferred by design** — Windows Hello unlock, incremental backup, auto-backup scheduler, and cloud sync are explicitly out of scope for v1.0 (see [Roadmap](#-roadmap) and `docs/SECURITY_REVIEW.md`).
 4. **Recovery-key loss** — if the PIN, password, and recovery key are all lost, the data is unrecoverable; this is a feature of the design, not a bug.
 
@@ -352,7 +352,7 @@ Results from the full verification run (12–13 November 2026, Windows x64) - al
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| SmartScreen blocks the installer | The installer is unsigned | **More info → Run anyway**, after verifying the SHA-256 from `RELEASE_NOTES.md` |
+| SmartScreen blocks the installer | The installer is unsigned | **More info → Run anyway**, after verifying the SHA-256 shown on the GitHub Release page |
 | Desktop/taskbar still shows the old icon | Windows icon cache lag | Right-click Desktop → **Refresh**, or restart Explorer |
 | exe keeps the old icon after `pnpm tauri icon` | build.rs now re-runs automatically | Rebuild; if only Explorer still lags, refresh the desktop icon cache |
 | Vault locks while you are reading | Auto-lock timer elapsed | Re-unlock; raise the timeout in **Settings** (1/5/15/30 min) |

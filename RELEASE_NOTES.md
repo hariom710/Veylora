@@ -32,13 +32,11 @@ initiates an export of a file to a location of their choice.
 ## How to Install
 
 1. Download `Veylora_1.0.0_x64-setup.exe` from the GitHub Releases page.
-2. Verify the SHA-256 hash matches the value published below:
+2. Verify the SHA-256 of the file you downloaded. The authoritative value is
+   printed in the GitHub Release description and shipped next to the
+   installer as `Veylora_1.0.0_x64-setup.exe.sha256` (each release asset is
+   built by CI, so its hash differs from any local build):
 
-   ```
-   SHA-256: f84a3399968c19364f0db9801cd0bc38976bdd0c981f1713ada4d06821b68f1c
-   ```
-
-   Verify with:
    ```
    certutil -hashfile Veylora_1.0.0_x64-setup.exe SHA256
    ```

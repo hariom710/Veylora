@@ -123,7 +123,7 @@ Negative: wrong PIN → InvalidCredential; wrong password → InvalidCredential;
 wrong recovery key → InvalidCredential; tampered vault.meta → VaultCorrupted;
 no vault.meta → VaultNotFound.
 IPC boundary: source-scan test confirms no key material types in command signatures.
-Windows session-lock: deferred to Phase 8 (#[ignore]d test documents deferral).
+Windows session-lock: implemented in v1.0 (auth::session_lock; phase4_windows_session_lock_locks_vault replaced the deferral placeholder).
 
 ## Phase 5 — Protected streaming
 Status: complete
@@ -178,7 +178,7 @@ Status: fixes applied (frontend assets + dialog plugin); smoke test in progress
 - FIX (dialog plugin): `@tauri-apps/plugin-dialog` was imported as `{ saveDialog, openDialog }`, but the package exports `{ save, open, message, ask, confirm }` — Rollup failed with `"saveDialog" is not exported by .../plugin-dialog/dist-js/index.js` (build-time error, `pnpm build`, src/routes/backup/index.tsx:11). Corrected to `import { save as saveDialog, open as openDialog }`. Backup screen now has "Browse…" buttons wired to `save`/`open` dialogs alongside the native text inputs.
 - tauri-plugin-dialog ADDED: Cargo.toml, main.rs plugin registration, capabilities/default.json, package.json, Backup screen wired with saveDialog/openDialog (aliased to save/open).
 - Icons: placeholder PNG icons generated at 16/24/32/48/64/128/256/512. Replace with professional artwork before v1.1.
-- Windows session-lock: DEFERRED to v1.1. WTS integration not available in build environment (missing msvcrt.lib for tauri-cli build).
+- Windows session-lock: IMPLEMENTED in v1.0 (auth/session_lock.rs, event-driven WTS). Previously deferred on a belief that WTS integration was unavailable in the build environment.
 - Windows Hello: DEFERRED to v1.1 (Option B - documented as known limitation).
 - Auto-update: DEFERRED to v1.1 (Option B - documented as known limitation).
 - Code signing: UNSIGNED (no certificate available). SHA-256 hash published for verification. SmartScreen warning documented in RELEASE_NOTES.md.
@@ -324,9 +324,9 @@ Status: fixes applied (frontend assets + dialog plugin); smoke test in progress
   import path (dialog → streaming encrypt → DB row); no separate bulk/folder
   import exists.
 - Skipped for v1.1 (by agreement, not regressions): light theme, per-folder
-  storage breakdown, "Move vault", Settings recovery-key re-display (impossible by design), Windows session-lock
-  polling, Windows Hello, auto-update, browser E2E. (Shipped in this pass:
-  right-click context menus, move-to-folder + folder rename, batch select.)
+  storage breakdown, "Move vault", Settings recovery-key re-display (impossible by design), Windows Hello, auto-update. (Shipped in this pass:
+  right-click context menus, move-to-folder + folder rename, batch select;
+  since shipped in v1.0: WTS session-lock, browser E2E suite.)
 - Frozen surfaces untouched: crypto/*, storage/format/*, storage/blob.rs,
   storage/crash.rs, streaming/*, auth/session.rs, backup/*. Format v1 unchanged;
   8 frozen HKDF labels unchanged (only subkey infos "manifest-nonce"/"trailer-nonce"
