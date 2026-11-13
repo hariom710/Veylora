@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { appLogin, appSignup } from '@/lib/ipc';
-import type { AppStatus } from '@/lib/types';
+import { commandErrorMessage, type AppStatus } from '@/lib/types';
 
 // Layer 1: app login. Does not touch the vault — the vault gate (Welcome /
 // Unlock) is only reached after this succeeds.
@@ -24,7 +24,7 @@ export default function Login({ onLogin }: { onLogin: (status: AppStatus) => voi
     if (result.ok) {
       onLogin(result.data);
     } else {
-      setError((result.error as any)?.message || 'Invalid email or password');
+      setError(commandErrorMessage(result.error) || 'Invalid email or password');
     }
   }
 
@@ -53,7 +53,7 @@ export default function Login({ onLogin }: { onLogin: (status: AppStatus) => voi
       setConfirm('');
       setError(null);
     } else {
-      setError((result.error as any)?.message || 'Failed to create account');
+      setError(commandErrorMessage(result.error) || 'Failed to create account');
     }
   }
 

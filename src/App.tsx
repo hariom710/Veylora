@@ -72,6 +72,7 @@ function AppContentInner() {
 
   useEffect(() => {
     boot();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: boot is re-created each render, so re-running it would loop
   }, []);
 
   async function boot() {

@@ -5,7 +5,7 @@ import { Card, CardContent, CardTitle, CardHeader } from '@/components/ui/card';
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { fileRecent, fileExport } from '@/lib/ipc';
 import { formatBytes, extOf } from '@/lib/format';
-import type { FileInfo } from '@/lib/types';
+import { commandErrorMessage, type FileInfo } from '@/lib/types';
 
 const VIEWER_BY_EXT: Record<string, 'pdf' | 'video' | 'image'> = {
   pdf: 'pdf',
@@ -30,7 +30,7 @@ export default function Recent({ token }: { token: string | null }) {
   async function load() {
     const result = await fileRecent(20);
     if (result.ok) setFiles(result.data);
-    else setError((result.error as any)?.message || 'Failed to load recent files');
+    else setError(commandErrorMessage(result.error) || 'Failed to load recent files');
   }
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export default function Recent({ token }: { token: string | null }) {
     if (!dest) return;
     const result = await fileExport(file.id, dest);
     if (result.ok) setMessage(`Exported to ${dest} (unencrypted copy)`);
-    else setError((result.error as any)?.message || 'Export failed');
+    else setError(commandErrorMessage(result.error) || 'Export failed');
   }
 
   return (

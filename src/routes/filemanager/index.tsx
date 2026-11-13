@@ -20,7 +20,7 @@ import {
 import { onFilesDropped } from '@/lib/dragDrop';
 import { formatBytes, extOf } from '@/lib/format';
 import { sortFiles, type SortKey } from '@/lib/sort';
-import type { FileInfo, FolderInfo } from '@/lib/types';
+import { commandErrorMessage, type FileInfo, type FolderInfo } from '@/lib/types';
 
 interface FileManagerProps {
   token: string | null;
@@ -102,7 +102,7 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
       setFolders(result.data.folders);
       setError(null);
     } else {
-      setError((result.error as any)?.message || 'Failed to list files');
+      setError(commandErrorMessage(result.error) || 'Failed to list files');
     }
     const favs = await fileFavorites();
     if (favs.ok) setFavIds(new Set(favs.data.map((f) => f.id)));
@@ -110,7 +110,6 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
 
   useEffect(() => {
     load(currentFolder);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFolder]);
 
   async function importPaths(paths: string[]) {
@@ -122,7 +121,7 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
       setMessage(`Imported ${result.data.length} file${result.data.length === 1 ? '' : 's'}`);
       await load(currentFolder);
     } else {
-      setError((result.error as any)?.message || 'Import failed');
+      setError(commandErrorMessage(result.error) || 'Import failed');
     }
   }
 
@@ -187,7 +186,7 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
         return next;
       });
     } else {
-      setError((result.error as any)?.message || 'Failed to update favorite');
+      setError(commandErrorMessage(result.error) || 'Failed to update favorite');
     }
   }
 
@@ -210,7 +209,7 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
       setError(null);
       setMessage(`Exported to ${dest} (unencrypted copy)`);
     } else {
-      setError((result.error as any)?.message || 'Export failed');
+      setError(commandErrorMessage(result.error) || 'Export failed');
     }
   }
 
@@ -221,7 +220,7 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
     if (result.ok) {
       await load(currentFolder);
     } else {
-      setError((result.error as any)?.message || 'Rename failed');
+      setError(commandErrorMessage(result.error) || 'Rename failed');
     }
   }
 
@@ -234,7 +233,7 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
     if (result.ok) {
       await load(currentFolder);
     } else {
-      setError((result.error as any)?.message || 'Delete failed');
+      setError(commandErrorMessage(result.error) || 'Delete failed');
     }
   }
 
@@ -245,7 +244,7 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
     if (result.ok) {
       await load(currentFolder);
     } else {
-      setError((result.error as any)?.message || 'Failed to create folder');
+      setError(commandErrorMessage(result.error) || 'Failed to create folder');
     }
   }
 
@@ -264,7 +263,7 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
     if (result.ok) {
       await load(currentFolder);
     } else {
-      setError((result.error as any)?.message || 'Rename failed');
+      setError(commandErrorMessage(result.error) || 'Rename failed');
     }
   }
 
@@ -284,7 +283,7 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
       setMessage(`Moved "${moveTarget.filename}"`);
       await load(currentFolder);
     } else {
-      setError((result.error as any)?.message || 'Move failed');
+      setError(commandErrorMessage(result.error) || 'Move failed');
     }
   }
 

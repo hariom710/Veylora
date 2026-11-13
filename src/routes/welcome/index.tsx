@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { vaultCreate, vaultGetMeta, vaultOpen } from '@/lib/ipc';
+import { commandErrorMessage } from '@/lib/types';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 
 const VAULT_PATH_KEY = 'veylora.vaultPath';
@@ -108,7 +109,7 @@ export default function Welcome({
       window.localStorage.setItem(VAULT_PATH_KEY, p);
       window.location.href = '/';
     } else {
-      setOpenError((result.error as any)?.message || 'Failed to open vault');
+      setOpenError(commandErrorMessage(result.error) || 'Failed to open vault');
       // Stale entry (vault moved or deleted): drop it instead of leaving a
       // row that can never work.
       const next = readRecent().filter((x) => x !== p);
@@ -142,7 +143,7 @@ export default function Welcome({
       // key before the user ever sees it.
       onCreated(result.data.recovery_key);
     } else {
-      setError((result.error as any)?.message || 'Failed to create vault');
+      setError(commandErrorMessage(result.error) || 'Failed to create vault');
     }
   }
 
@@ -157,7 +158,7 @@ export default function Welcome({
       pushRecent(openPath);
       window.location.href = '/';
     } else {
-      setOpenError((result.error as any)?.message || 'Failed to open vault');
+      setOpenError(commandErrorMessage(result.error) || 'Failed to open vault');
     }
   }
 

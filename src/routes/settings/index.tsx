@@ -12,6 +12,7 @@ import {
   autoLockSet,
 } from '@/lib/ipc';
 import { formatBytes } from '@/lib/format';
+import { commandErrorMessage } from '@/lib/types';
 
 const AUTO_LOCK_KEY = 'veylora.autoLockSecs';
 
@@ -96,7 +97,7 @@ export default function Settings() {
     }
     const result = await autoLockSet(secs);
     if (result.ok) ok(secs === 0 ? 'Auto-lock disabled' : 'Auto-lock timeout updated');
-    else setError((result.error as any)?.message || 'Failed to update auto-lock');
+    else setError(commandErrorMessage(result.error) || 'Failed to update auto-lock');
   }
 
   async function handleChangePin(e: React.FormEvent) {
@@ -113,7 +114,7 @@ export default function Settings() {
       setCurrentPin('');
       setNewPin('');
     } else {
-      setError((result.error as any)?.message || 'Failed to change PIN');
+      setError(commandErrorMessage(result.error) || 'Failed to change PIN');
     }
   }
 
@@ -136,7 +137,7 @@ export default function Settings() {
       setNewPw('');
       setConfirmPw('');
     } else {
-      setError((result.error as any)?.message || 'Failed to change password');
+      setError(commandErrorMessage(result.error) || 'Failed to change password');
     }
   }
 
@@ -147,7 +148,7 @@ export default function Settings() {
     if (!confirmed) return;
     const result = await vaultBackupHistoryClear();
     if (result.ok) ok('Backup history cleared');
-    else setError((result.error as any)?.message || 'Failed to clear history');
+    else setError(commandErrorMessage(result.error) || 'Failed to clear history');
   }
 
   async function handleDeleteVault(e: React.FormEvent) {
@@ -172,7 +173,7 @@ export default function Settings() {
       // Back to a fresh install state (Create Vault screen).
       window.location.reload();
     } else {
-      setError((result.error as any)?.message || 'Failed to delete vault');
+      setError(commandErrorMessage(result.error) || 'Failed to delete vault');
     }
   }
 

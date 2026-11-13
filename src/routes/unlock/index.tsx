@@ -8,6 +8,7 @@ import {
   vaultUnlockRecovery,
   vaultGetSessionToken,
 } from '@/lib/ipc';
+import { commandErrorMessage } from '@/lib/types';
 
 type Method = 'pin' | 'password' | 'recovery';
 
@@ -32,7 +33,7 @@ export default function Unlock({ onUnlock }: { onUnlock: (method: string, value:
         const token = await vaultGetSessionToken();
         onUnlock(method, token.ok ? token.data : '');
       } else {
-        setError((result.error as any)?.message || 'Invalid credential');
+        setError(commandErrorMessage(result.error) || 'Invalid credential');
       }
     } catch (e) {
       setError((e as Error)?.message || 'Invalid credential');

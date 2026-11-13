@@ -10,7 +10,7 @@ import {
   appCreateUser,
   appLogout,
 } from '@/lib/ipc';
-import type { AppStatus, AppUser } from '@/lib/types';
+import { commandErrorMessage, type AppStatus, type AppUser } from '@/lib/types';
 
 interface AccountProps {
   app: AppStatus;
@@ -70,7 +70,7 @@ export default function Account({ app, onLogout }: AccountProps) {
     } else {
       setPwMessage({
         ok: false,
-        text: (result.error as any)?.message || 'Failed to update password',
+        text: commandErrorMessage(result.error) || 'Failed to update password',
       });
     }
   }
@@ -88,7 +88,7 @@ export default function Account({ app, onLogout }: AccountProps) {
     } else {
       setAddMessage({
         ok: false,
-        text: (result.error as any)?.message || 'Failed to create user',
+        text: commandErrorMessage(result.error) || 'Failed to create user',
       });
     }
   }
@@ -97,7 +97,7 @@ export default function Account({ app, onLogout }: AccountProps) {
     setActionError(null);
     const result = await appDeleteUser(user.id);
     if (!result.ok) {
-      setActionError((result.error as any)?.message || 'Failed to delete user');
+      setActionError(commandErrorMessage(result.error) || 'Failed to delete user');
     } else {
       await loadUsers();
     }

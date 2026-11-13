@@ -7,7 +7,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { vaultStatus, fileImport, fileRecent, fileFavorites, vaultBackupHistory } from '@/lib/ipc';
 import { onFilesDropped } from '@/lib/dragDrop';
 import { formatBytes } from '@/lib/format';
-import type { FileInfo } from '@/lib/types';
+import { commandErrorMessage, type FileInfo } from '@/lib/types';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -34,7 +34,6 @@ export default function Dashboard() {
         setLastBackup(new Date(r.data[0].created_at_unix * 1000).toLocaleString());
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadStatus() {
@@ -53,7 +52,7 @@ export default function Dashboard() {
       setMessage(`Imported ${result.data.length} file${result.data.length === 1 ? '' : 's'}`);
       await loadStatus();
     } else {
-      setError((result.error as any)?.message || 'Import failed');
+      setError(commandErrorMessage(result.error) || 'Import failed');
     }
   }
 

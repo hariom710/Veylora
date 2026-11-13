@@ -5,7 +5,7 @@ import { Card, CardContent, CardTitle, CardHeader } from '@/components/ui/card';
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { fileFavorites, fileFavorite, fileExport } from '@/lib/ipc';
 import { formatBytes, extOf } from '@/lib/format';
-import type { FileInfo } from '@/lib/types';
+import { commandErrorMessage, type FileInfo } from '@/lib/types';
 
 const VIEWER_BY_EXT: Record<string, 'pdf' | 'video' | 'image'> = {
   pdf: 'pdf',
@@ -30,7 +30,7 @@ export default function Favorites({ token }: { token: string | null }) {
   async function load() {
     const result = await fileFavorites();
     if (result.ok) setFiles(result.data);
-    else setError((result.error as any)?.message || 'Failed to load favorites');
+    else setError(commandErrorMessage(result.error) || 'Failed to load favorites');
   }
 
   useEffect(() => {
@@ -45,7 +45,7 @@ export default function Favorites({ token }: { token: string | null }) {
   async function handleUnstar(file: FileInfo) {
     const result = await fileFavorite(file.id, false);
     if (result.ok) await load();
-    else setError((result.error as any)?.message || 'Failed to unstar');
+    else setError(commandErrorMessage(result.error) || 'Failed to unstar');
   }
 
   async function handleExport(file: FileInfo) {
@@ -57,7 +57,7 @@ export default function Favorites({ token }: { token: string | null }) {
     if (!dest) return;
     const result = await fileExport(file.id, dest);
     if (result.ok) setMessage(`Exported to ${dest} (unencrypted copy)`);
-    else setError((result.error as any)?.message || 'Export failed');
+    else setError(commandErrorMessage(result.error) || 'Export failed');
   }
 
   return (
