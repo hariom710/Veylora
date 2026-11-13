@@ -12,6 +12,9 @@ vi.mock('@/lib/ipc', () => ({
   autoLockSet: vi.fn(),
 }));
 
+vi.mock('@tauri-apps/plugin-updater', () => ({ check: vi.fn() }));
+vi.mock('@tauri-apps/plugin-process', () => ({ relaunch: vi.fn() }));
+
 import {
   vaultStatus,
   vaultChangePin,
@@ -19,6 +22,8 @@ import {
   vaultDelete,
   autoLockSet,
 } from '@/lib/ipc';
+import { check as checkUpdate } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 
 describe('Settings (Slice C)', () => {
   const user = userEvent.setup();
@@ -102,5 +107,33 @@ describe('Settings (Slice C)', () => {
 
     await vi.waitFor(() => expect(vaultDelete).toHaveBeenCalledWith('1234'));
     confirmSpy.mockRestore();
+  });
+
+  it('reports up-to-date when no newer release exists (no relaunch)', async () => {
+    vi.mocked(checkUpdate).mockResolvedValue(null);
+    render(<Settings />);
+
+    await user.click(screen.getByRole('button', { name: 'About' }));
+    await user.click(screen.getByTestId('check-updates-button'));
+
+    expect(await screen.findByText(/You are up to date/i)).toBeInTheDocument();
+    expect(relaunch).not.toHaveBeenCalled();
+  });
+
+  it('downloads, installs and relaunches when an update is available', async () => {
+    const downloadAndInstall = vi.fn().mockResolvedValue(undefined);
+    // Partial Update: the UI only reads version + downloadAndInstall.
+    vi.mocked(checkUpdate).mockResolvedValue({
+      version: '1.0.2',
+      downloadAndInstall,
+    } as unknown as Awaited<ReturnType<typeof checkUpdate>>);
+    render(<Settings />);
+
+    await user.click(screen.getByRole('button', { name: 'About' }));
+    await user.click(screen.getByTestId('check-updates-button'));
+
+    await vi.waitFor(() => expect(downloadAndInstall).toHaveBeenCalled());
+    expect(await screen.findByText(/restarting Veylora/i)).toBeInTheDocument();
+    await vi.waitFor(() => expect(relaunch).toHaveBeenCalled());
   });
 });

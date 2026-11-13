@@ -1,3 +1,23 @@
+# Veylora Release Notes
+
+## v1.0.1 (2026-11-13)
+
+- **Auto-update**: Settings → About → **Check for updates** now downloads a
+  newer release from GitHub Releases, verifies its minisign signature against
+  the key embedded in the app, installs it, and relaunches. v1.0.0 and older
+  builds carry no updater — install v1.0.1 manually once; every release from
+  v1.0.1 on is self-updating.
+- **Installer**: ships a `.sig` updater signature and a `latest.json`
+  manifest alongside the usual `.sha256` sidecar (the updater's source of
+  truth for "is there a newer version").
+- **Explorer icon cache**: the app broadcasts an icon-change notification on
+  startup, so Windows re-reads the executable icon without a manual cache
+  wipe.
+- Docs/toolchain numbers refreshed (Rust 1.100, 169 Rust + 72 frontend
+  tests).
+
+---
+
 # Veylora v1.0.0 Release Notes
 
 ## Release Date
@@ -61,8 +81,8 @@ tampered with in transit.
 
 - **Windows Hello**: Not available in v1.0. PIN, password, and recovery key
   are the supported unlock methods.
-- **Auto-update**: Not available in v1.0. Check GitHub Releases for new
-  versions and verify the SHA-256 before installing.
+- **Auto-update**: Not available in v1.0.0 (added in v1.0.1 — check GitHub
+  Releases for new versions and verify the SHA-256 before installing).
 - **Recovery key loss**: If you lose all credentials (PIN, password, and
   recovery key), your data is permanently unrecoverable. Back up your
   recovery key in a safe place.

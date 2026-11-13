@@ -11,8 +11,8 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)](https://vite.dev)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
-[![Rust](https://img.shields.io/badge/Rust-1.99-000000?logo=rust&logoColor=white)](https://www.rust-lang.org)
-[![Tests](https://img.shields.io/badge/tests-168%20Rust%20%C2%B7%2068%20Frontend-brightgreen)](#-testing-and-verification)
+[![Rust](https://img.shields.io/badge/Rust-1.100-000000?logo=rust&logoColor=white)](https://www.rust-lang.org)
+[![Tests](https://img.shields.io/badge/tests-169%20Rust%20%C2%B7%2072%20Frontend-brightgreen)](#-testing-and-verification)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078D6?logo=windows11&logoColor=white)](#-installation)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-green)](#-license)
 
@@ -32,9 +32,9 @@
 
 **Who it is for.** Windows users who want personal documents, photos and media encrypted at rest in a fast native app — no account, no server, no subscription.
 
-**Why Rust + Tauri.** Key material lives in RAM, so the platform matters. Rust gives memory safety plus zero-cost `zeroize` (keys are wiped the instant the vault locks); the RustCrypto crates supply Argon2id, XChaCha20-Poly1305 and HKDF with no C toolchain; `rusqlite` bundles SQLite so there is no system dependency. Tauri keeps the shell tiny — the installer is ~3.2 MB and the UI runs on Windows' preinstalled WebView2 instead of a bundled browser.
+**Why Rust + Tauri.** Key material lives in RAM, so the platform matters. Rust gives memory safety plus zero-cost `zeroize` (keys are wiped the instant the vault locks); the RustCrypto crates supply Argon2id, XChaCha20-Poly1305 and HKDF with no C toolchain; `rusqlite` bundles SQLite so there is no system dependency. Tauri keeps the shell tiny — the installer is ~4.3 MB and the UI runs on Windows' preinstalled WebView2 instead of a bundled browser.
 
-**Maturity.** This is a **functional v1.0.0 suitable for personal use**: the NSIS installer builds, installs and launches; **169 Rust + 70 frontend tests pass**; and a full packaged-app smoke run (first-run wipe → login → vault creation → recovery → import → viewer render → lock → keypad unlock → dashboard counts) exits green on the final artifact. The security review is **internal** ([`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md)), not an external audit; the installer is unsigned; and known issues are listed under [Limitations](#-limitations-and-known-issues).
+**Maturity.** This is a **functional v1.0.1 suitable for personal use**: the NSIS installer builds, installs and launches; **169 Rust + 72 frontend tests pass**; and a full packaged-app smoke run (first-run wipe → login → vault creation → recovery → import → viewer render → lock → keypad unlock → dashboard counts) exits green on the final artifact. The security review is **internal** ([`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md)), not an external audit; the installer is unsigned; and known issues are listed under [Limitations](#-limitations-and-known-issues).
 
 **Deliberately out of scope:** cloud sync, incremental backup, and an auto-backup scheduler. Veylora is local-only by design.
 
@@ -98,7 +98,7 @@
 | [Vite](https://vite.dev) | ^7.3.8 | Dev server + production bundle | Build |
 | [Tailwind CSS](https://tailwindcss.com) | ^3.4 | Styling (design tokens in `tailwind.config.ts`) | Build |
 | [lucide-react](https://lucide.dev) | ^0.344 | Icons | Runtime |
-| [Rust](https://www.rust-lang.org) | 1.99.0 | Backend, crypto, storage, streaming | Build |
+| [Rust](https://www.rust-lang.org) | 1.100.0 | Backend, crypto, storage, streaming | Build |
 | [argon2](https://docs.rs/argon2) | 0.5 | Argon2id KEK + login-password hashing | Runtime |
 | [chacha20poly1305](https://docs.rs/chacha20poly1305) | 0.11 | XChaCha20-Poly1305 AEAD | Runtime |
 | [hkdf](https://docs.rs/hkdf) / [sha2](https://docs.rs/sha2) | 0.12 / 0.10 | Subkey derivation, checksums | Runtime |
@@ -106,7 +106,7 @@
 | [getrandom](https://docs.rs/getrandom) | 0.2 | OS CSPRNG for all key material | Runtime |
 | [rusqlite](https://docs.rs/rusqlite) (bundled) | 0.41 | Metadata DB (WAL + `synchronous=FULL`) | Runtime |
 | serde / serde_json | 1 | (De)serialization | Runtime |
-| [Vitest](https://vitest.dev) + jsdom | ^5.1 | Frontend tests (70) | Test |
+| [Vitest](https://vitest.dev) + jsdom | ^5.1 | Frontend tests (72) | Test |
 | Node.js / pnpm | v22.21.1 / 8.15.9 | Tooling, build scripts | Build |
 | NSIS (via Tauri bundler) | — | Per-user Windows installer | Build |
 
@@ -195,14 +195,16 @@ docs/                     ARCHITECTURE, CRYPTO_DESIGN, SECURITY_REVIEW,
 The production build produces a per-user NSIS installer (no admin rights required):
 
 ```
-src-tauri\target\release\bundle\nsis\Veylora_1.0.0_x64-setup.exe   (~3.2 MB)
+src-tauri\target\release\bundle\nsis\Veylora_1.0.1_x64-setup.exe   (~4.3 MB)
 ```
 
 > This is a **local build output path**. Published releases land on the GitHub Releases page, where each release description prints the expected **SHA-256** of the attached installer (also shipped as a `.sha256` sidecar) — always verify it before running:
 >
 > ```powershell
-> certutil -hashfile Veylora_1.0.0_x64-setup.exe SHA256
+> certutil -hashfile Veylora_1.0.1_x64-setup.exe SHA256
 > ```
+
+From v1.0.1 the app can also update itself: **Settings → About → Check for updates** downloads the newer signed build from GitHub Releases and installs it (the signature is verified against the release key embedded in the app before anything runs).
 
 Requirements:
 
@@ -237,10 +239,10 @@ Quality checks (run from the repository root):
 
 ```powershell
 pnpm typecheck            # tsc --noEmit — must report 0 errors
-pnpm test                 # 70 frontend tests (Vitest + jsdom)
+pnpm test                 # 72 frontend tests (Vitest + jsdom)
 build.bat test            # 169 Rust tests, via the MSVC environment wrapper
 pnpm build                # production frontend bundle
-build.bat tauri build     # release binary + NSIS installer
+build.bat tauri build     # release binary + NSIS installer (signed updater artifacts)
 ```
 
 Notes:
@@ -248,6 +250,7 @@ Notes:
 - **`build.bat`** locates Visual Studio through `vswhere`, loads `vcvars64`, then runs `cargo` in `src-tauri\` — edit its `cd` path if your checkout lives elsewhere. Without a C++ toolchain it fails with an explicit error.
 - **`pnpm typecheck`** is a real gate (`tsc --noEmit`, 0 errors); CI runs it together with the tests on every push.
 - **Icons:** after regenerating (`pnpm tauri icon app-icon.png`) a rebuild picks them up automatically — `build.rs` hashes the icon folder and forces the embed to recompile. Only the Windows Explorer icon cache may lag (see [Troubleshooting](#-troubleshooting)).
+- **Release builds sign updater artifacts** (`createUpdaterArtifacts`), so `tauri build` needs the minisign private key. CI reads it from the `TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD` repository secrets; for a local installer build set `$env:TAURI_SIGNING_PRIVATE_KEY = "$env:USERPROFILE\.tauri\veylora-updater.key"` (and `..._PASSWORD`) first.
 
 ---
 
@@ -261,7 +264,7 @@ Notes:
 6. **Files page** — per-file `Open` / `Export` / `Rename` / `Delete`, folders, the move dialog, sort, search, batch select, and a right-click context menu.
 7. **View** — images, video and PDF open in-app over `vault://`; decrypted bytes never touch disk. Lock with <kbd>Ctrl</kbd>+<kbd>L</kbd> or **Lock Vault**, then unlock from the keypad (PIN / password / recovery tabs).
 8. **Backup page** — **Create** a container, **Verify** it, **Restore** it, and review or clear the history.
-9. **Settings** — auto-lock timeout (1/5/15/30 min), change PIN, change master password, and a type-to-confirm **Danger Zone** to delete the vault.
+9. **Settings** — auto-lock timeout (1/5/15/30 min), change PIN, change master password, a **Check for updates** action (About tab, from v1.0.1), and a type-to-confirm **Danger Zone** to delete the vault.
 10. **Account** — avatar, user management for admins (create/delete users), and **Sign out** (clears Layer 1 only).
 
 **Keyboard shortcuts**
@@ -280,7 +283,7 @@ Notes:
 
 ## 🔐 Security and privacy
 
-Veylora is a **fully local application**: no accounts on any server, no analytics, no telemetry, and no network calls of any kind — `vault://` is a loopback URI scheme handled inside the process.
+Veylora is a **fully local application**: no accounts on any server, no analytics, no telemetry, and no network calls during normal use — the only outbound traffic is the opt-in **Check for updates** (Settings → About), which fetches a signed manifest from GitHub Releases. `vault://` is a loopback URI scheme handled inside the process.
 
 **Verified safeguards**
 
@@ -298,7 +301,7 @@ Veylora is a **fully local application**: no accounts on any server, no analytic
 **Known findings (open and disclosed)**
 
 1. **No external audit** — [`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md) is an internal review.
-2. **Unsigned installer, no auto-update** — see the SHA-256 workflow in [Installation](#-installation).
+2. **Unsigned installer** — no code-signing certificate, so SmartScreen warns on first run; see the SHA-256 workflow in [Installation](#-installation). (Updates themselves are separately signed since v1.0.1.)
 3. **Losing all three credentials** (PIN + password + recovery key) makes the vault permanently unrecoverable — by design.
 
 **Threat model.** Veylora protects data at rest against offline disk access and detects vault tampering. It does **not** protect against kernel-level malware, a compromised OS, coerced disclosure, or a compromised WebView2 — the full "protects / does not protect" list lives in [`RELEASE_NOTES.md`](RELEASE_NOTES.md).
@@ -316,18 +319,18 @@ Results from the full verification run (12–13 November 2026, Windows x64) - al
 | `pnpm typecheck` (`tsc --noEmit`) | **0 errors** (193 latent errors were hidden behind a broken config flag) | — |
 | CI (`.github/workflows/ci.yml`) | Frontend: typecheck + lint + tests + build (Ubuntu); Rust: `fmt --check` + clippy `-D warnings` + tests; Windows: full packaged build **+ installed-app CDP smoke (browser E2E)** | — |
 | Packaged-app smoke (WebView2 CDP automation) | **Exit 0** on the final installer — first-run wipe → login → create vault → recovery → import → image viewer renders (64×64) → `vault://` fetch returns 200 → lock → keypad unlock → dashboard shows `1 files encrypted \| Storage: 494 B` | Committed as [`scripts/smoke.ps1`](scripts/smoke.ps1) (parameterized exe path, vault, creds, port, shot dir; asserts and non-zero exit on failure); CI sets `VEYLORA_CDP_PORT` so production launches do not expose CDP |
-| Installer SHA-256 | `62cd375f…97c7c` for the locally verified build; each GitHub Release prints the hash of the asset it ships (plus a `.sha256` sidecar) | — |
+| Installer SHA-256 | `E4D94C91…9F0F6` for the locally verified build; each GitHub Release prints the hash of the asset it ships (plus a `.sha256` sidecar) | — |
 | Icon embedding | Verified by extracting the icon from **both** the built and the installed exe | Manual |
 | Test-data hygiene | Test vault and WebView2 localStorage wiped after every smoke run | — |
 
-**Every test runs offline** — the app itself makes no network calls, so there are no flaky network-dependent tests to `#[ignore]`. The two ignored Rust tests are heavyweight suites excluded from the default run.
+**Every test runs offline** — the only network path in the app is the opt-in **Check for updates** action (Settings → About), which tests mock; there are no flaky network-dependent tests to `#[ignore]`. The two ignored Rust tests are heavyweight suites excluded from the default run.
 
 ---
 
 ## ⚠️ Limitations and known issues
 
 1. **Windows-only** — WebView2, NSIS, and Windows path semantics; other operating systems are unsupported.
-2. **Distribution gaps** — no code signing (SmartScreen warning) and no auto-update; verify the SHA-256 shown on the GitHub Release page after every download. A single-instance lock keeps two launches from sharing vault state.
+2. **Distribution gaps** — no code signing (SmartScreen warning); verify the SHA-256 shown on the GitHub Release page after every download. A single-instance lock keeps two launches from sharing vault state.
 3. **Deferred by design** — Windows Hello unlock, incremental backup, auto-backup scheduler, and cloud sync are explicitly out of scope for v1.0 (see [Roadmap](#-roadmap) and `docs/SECURITY_REVIEW.md`).
 4. **Recovery-key loss** — if the PIN, password, and recovery key are all lost, the data is unrecoverable; this is a feature of the design, not a bug.
 
@@ -342,7 +345,8 @@ Results from the full verification run (12–13 November 2026, Windows x64) - al
 ### P2 — platform (deferred from the security review)
 
 - [ ] Windows Hello unlock (TPM/DPAPI work — needs independent review before shipping)
-- [ ] Signed installer + Tauri auto-update
+- [x] Tauri auto-update (signed updater + **Settings → About → Check for updates**)
+- [ ] Signed installer (needs a code-signing certificate)
 - [x] Windows session-lock detection (WTS) for instant auto-lock
 - [x] Browser-based E2E suite
 
@@ -353,8 +357,8 @@ Results from the full verification run (12–13 November 2026, Windows x64) - al
 | Symptom | Likely cause | What to do |
 |---|---|---|
 | SmartScreen blocks the installer | The installer is unsigned | **More info → Run anyway**, after verifying the SHA-256 shown on the GitHub Release page |
-| Desktop/taskbar still shows the old icon | Windows icon cache lag | Right-click Desktop → **Refresh**, or restart Explorer |
-| exe keeps the old icon after `pnpm tauri icon` | build.rs now re-runs automatically | Rebuild; if only Explorer still lags, refresh the desktop icon cache |
+| Desktop/taskbar still shows the old icon | Windows icon cache lag | Veylora broadcasts an icon refresh on every launch — restart the app; if it persists, right-click Desktop → **Refresh**, or restart Explorer |
+| exe keeps the old icon after `pnpm tauri icon` | build.rs re-runs automatically | Rebuild; the next launch notifies the shell so Explorer re-reads the new icon |
 | Vault locks while you are reading | Auto-lock timer elapsed | Re-unlock; raise the timeout in **Settings** (1/5/15/30 min) |
 | Viewer shows 403 / goes blank after locking | Mid-stream lock (by design) | Unlock and reopen the file |
 | Forgot PIN or master password | — | Unlock with the **recovery key** (Settings shows the flow); if all three are lost, the vault is unrecoverable by design |

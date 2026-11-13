@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { check as checkUpdate } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardTitle, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -63,6 +65,10 @@ export default function Settings() {
   // Danger zone.
   const [deletePin, setDeletePin] = useState('');
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
+
+  // Software updates (About tab): progress text + in-flight flag.
+  const [updateMsg, setUpdateMsg] = useState<string | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
 
   const [status, setStatus] = useState<any>(null);
 
@@ -174,6 +180,33 @@ export default function Settings() {
       window.location.reload();
     } else {
       setError(commandErrorMessage(result.error) || 'Failed to delete vault');
+    }
+  }
+
+  // About tab: check GitHub Releases for a signed newer build, install it
+  // over the running one, then relaunch. Signature verification happens in
+  // Rust against the pubkey baked into tauri.conf.json.
+  async function handleCheckUpdates() {
+    setUpdateBusy(true);
+    setUpdateMsg(null);
+    setError(null);
+    try {
+      const update = await checkUpdate();
+      if (!update) {
+        setUpdateMsg('You are up to date — no newer release found.');
+        return;
+      }
+      setUpdateMsg(`Downloading v${update.version}…`);
+      await update.downloadAndInstall((event) => {
+        if (event.event === 'Started') setUpdateMsg(`Downloading v${update.version}…`);
+        else if (event.event === 'Finished') setUpdateMsg('Download verified — installing…');
+      });
+      setUpdateMsg('Update installed — restarting Veylora…');
+      await relaunch();
+    } catch (e) {
+      setError(`Update check failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setUpdateBusy(false);
     }
   }
 
@@ -399,39 +432,67 @@ export default function Settings() {
         )}
 
         {tab === 'about' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>About Veylora</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 text-sm text-muted">
-                <div className="flex justify-between">
-                  <span>Version</span>
-                  <span className="text-foreground">1.0</span>
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>About Veylora</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 text-sm text-muted">
+                  <div className="flex justify-between">
+                    <span>Version</span>
+                    <span className="text-foreground">1.0.1</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Vault format</span>
+                    <span className="text-foreground">v1 (frozen)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Encryption</span>
+                    <span className="text-foreground">XChaCha20-Poly1305</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Key derivation</span>
+                    <span className="text-foreground">Argon2id + HKDF-SHA256</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Storage</span>
+                    <span className="text-foreground">Local only — no cloud, ever</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>License</span>
+                    <span className="text-foreground">MIT OR Apache-2.0</span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span>Vault format</span>
-                  <span className="text-foreground">v1 (frozen)</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Encryption</span>
-                  <span className="text-foreground">XChaCha20-Poly1305</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Key derivation</span>
-                  <span className="text-foreground">Argon2id + HKDF-SHA256</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Storage</span>
-                  <span className="text-foreground">Local only — no cloud, ever</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>License</span>
-                  <span className="text-foreground">MIT OR Apache-2.0</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>Software Updates</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted mb-4">
+                  Veylora checks GitHub Releases for newer versions. Updates are signed with the
+                  release key baked into the app — a build that fails signature verification is
+                  never installed.
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={handleCheckUpdates}
+                  disabled={updateBusy}
+                  data-testid="check-updates-button"
+                >
+                  {updateBusy ? 'Working…' : 'Check for updates'}
+                </Button>
+                {updateMsg && (
+                  <p role="status" className="text-caption text-muted-foreground mt-2">
+                    {updateMsg}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </>
         )}
 
         {tab === 'danger' && (

@@ -37,7 +37,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm tauri build
+      # createUpdaterArtifacts requires the release signing key even for a
+      # CI validation build (fork PRs without secrets will fail here).
+      - name: Tauri build
+        run: pnpm tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       # Server 2025 runner images don't guarantee the WebView2 Runtime; the
       # smoke needs it to boot the app's webview. Idempotent bootstrapper.
       - name: Ensure WebView2 Runtime

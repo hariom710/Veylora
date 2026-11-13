@@ -64,9 +64,9 @@ improvement.
 | Item | Status | Rationale |
 |------|--------|-----------|
 | Windows Hello | Deferred to v1.1 | Complex TPM/DPAPI glue needs independent review |
-| Auto-update | Deferred to v1.1 | Update signature key compromise is a real attack surface |
+| Auto-update | Implemented (v1.0.1) | `tauri-plugin-updater` verifies each update against the minisign pubkey pinned at build time; the private key lives only in GitHub Secrets + an offline backup — its leak would be a malware channel, so treat it like a code-signing key |
 | Windows session-lock | Implemented (v1.0) | Event-driven `WM_WTSSESSION_CHANGE` (Win+L / RDP lock) locks the vault instantly; the OS unlock event never unlocks it |
-| Browser E2E | Deferred to v1.1 | Backend E2E tests substitute |
+| Browser E2E | Implemented (v1.0) | Packaged-app CDP smoke drives the real WebView2 in CI |
 
 ### Non-Goals (Confirmed Absent)
 

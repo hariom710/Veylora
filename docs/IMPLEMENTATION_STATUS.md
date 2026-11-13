@@ -180,7 +180,7 @@ Status: fixes applied (frontend assets + dialog plugin); smoke test in progress
 - Icons: placeholder PNG icons generated at 16/24/32/48/64/128/256/512. Replace with professional artwork before v1.1.
 - Windows session-lock: IMPLEMENTED in v1.0 (auth/session_lock.rs, event-driven WTS). Previously deferred on a belief that WTS integration was unavailable in the build environment.
 - Windows Hello: DEFERRED to v1.1 (Option B - documented as known limitation).
-- Auto-update: DEFERRED to v1.1 (Option B - documented as known limitation).
+- Auto-update: IMPLEMENTED in v1.0.1 (tauri-plugin-updater; release.yml signs the NSIS artifact and publishes latest.json; pubkey pinned in tauri.conf.json, private key in GitHub Secrets + offline backup). Previously deferred over signature-key compromise risk.
 - Code signing: UNSIGNED (no certificate available). SHA-256 hash published for verification. SmartScreen warning documented in RELEASE_NOTES.md.
 - CI/CD: .github/workflows/ci.yml and .github/workflows/release.yml created.
 - Supply chain: src-tauri/deny.toml created; cargo-deny passes (advisories, bans, licenses, sources ok).
@@ -324,9 +324,10 @@ Status: fixes applied (frontend assets + dialog plugin); smoke test in progress
   import path (dialog → streaming encrypt → DB row); no separate bulk/folder
   import exists.
 - Skipped for v1.1 (by agreement, not regressions): light theme, per-folder
-  storage breakdown, "Move vault", Settings recovery-key re-display (impossible by design), Windows Hello, auto-update. (Shipped in this pass:
+  storage breakdown, "Move vault", Settings recovery-key re-display (impossible by design), Windows Hello. (Shipped in this pass:
   right-click context menus, move-to-folder + folder rename, batch select;
-  since shipped in v1.0: WTS session-lock, browser E2E suite.)
+  since shipped in v1.0: WTS session-lock, browser E2E suite; v1.0.1:
+  auto-update, shell icon-cache refresh.)
 - Frozen surfaces untouched: crypto/*, storage/format/*, storage/blob.rs,
   storage/crash.rs, streaming/*, auth/session.rs, backup/*. Format v1 unchanged;
   8 frozen HKDF labels unchanged (only subkey infos "manifest-nonce"/"trailer-nonce"

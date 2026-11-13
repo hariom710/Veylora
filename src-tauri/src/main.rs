@@ -321,6 +321,35 @@ fn vault_delete_cmd(
     veylora::commands::vault_delete(pin, state.inner().clone())
 }
 
+/// Explorer caches executable icons and keeps showing the old one after an
+/// icon rebuild; tell the shell the item (and file associations) changed so
+/// it re-reads the new icon without a manual cache wipe. See README
+/// → Troubleshooting.
+fn refresh_shell_icon_cache() {
+    use windows::Win32::UI::Shell::{
+        SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNE_UPDATEITEM, SHCNF_IDLIST, SHCNF_PATHW,
+    };
+
+    if let Ok(exe) = env::current_exe() {
+        let wide: Vec<u16> = exe
+            .to_string_lossy()
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        unsafe {
+            SHChangeNotify(
+                SHCNE_UPDATEITEM,
+                SHCNF_PATHW,
+                Some(wide.as_ptr().cast()),
+                None,
+            );
+        }
+    }
+    unsafe {
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
+    }
+}
+
 fn main() {
     let manager: Arc<SessionManager> = Arc::new(SessionManager::new());
     let app_auth: Arc<veylora::app_auth::AppAuth> =
@@ -332,6 +361,9 @@ fn main() {
     // Session-lock watcher: locks the vault the moment the OS session locks
     // (Win+L, RDP lock). See auth::session_lock.
     veylora::auth::session_lock::spawn_watcher(manager.clone());
+    // One broadcast per launch keeps Explorer's icon cache in sync (cheap,
+    // fire-and-forget).
+    refresh_shell_icon_cache();
 
     let mut context = generate_context!();
     if let Some(port) = env::var_os("VEYLORA_CDP_PORT") {
@@ -363,6 +395,10 @@ fn main() {
             }
         }))
         .plugin(tauri_plugin_dialog::init())
+        // Settings → "Check for updates": downloads a signed update from
+        // GitHub Releases; process lets the frontend relaunch after install.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(manager.clone())
         .manage(app_auth)
         .register_uri_scheme_protocol("vault", move |_app, request| {

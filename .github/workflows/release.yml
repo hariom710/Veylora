@@ -32,19 +32,51 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Tauri build
+        # Signs the updater artifacts (.sig) with the release minisign key;
+        # without it the build fails now that createUpdaterArtifacts is on.
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri build
 
       - name: Compute SHA-256 of installer
         id: hash
         run: |
-          $installer = Get-ChildItem -Path src-tauri\target\release\bundle\nsis\* -File | Select-Object -First 1
-          if (-not $installer) { $installer = Get-ChildItem -Path src-tauri\target\release\bundle\msi\* -File | Select-Object -First 1 }
+          # Filter on the exact suffix: build now also emits *.exe.sig files.
+          $installer = Get-ChildItem -Path src-tauri\target\release\bundle\nsis\* -File | Where-Object { $_.Name -like '*-setup.exe' } | Select-Object -First 1
+          if (-not $installer) { $installer = Get-ChildItem -Path src-tauri\target\release\bundle\msi\*.msi -File | Select-Object -First 1 }
           $hash = Get-FileHash -Algorithm SHA256 $installer.FullName | Select-Object -ExpandProperty Hash
           # The bundler emits no sidecar; write one so the release ships a
           # hash file matching the attached asset.
           Set-Content -Path "$($installer.FullName).sha256" -Value "$hash  $($installer.Name)" -NoNewline -Encoding ascii
           echo "hash=$hash" >> $env:GITHUB_OUTPUT
           echo "installer=$($installer.Name)" >> $env:GITHUB_OUTPUT
+
+      # Static manifest the tauri updater plugin polls
+      # (releases/latest/download/latest.json): version, notes, and the
+      # signed URL + signature of the Windows installer.
+      - name: Build updater latest.json
+        id: updater
+        run: |
+          $sig = Get-ChildItem src-tauri\target\release\bundle\nsis\*.exe.sig | Select-Object -First 1
+          if (-not $sig) { throw "No updater .sig produced - createUpdaterArtifacts must be on" }
+          $exe = Get-ChildItem src-tauri\target\release\bundle\nsis\*-setup.exe | Where-Object { $_.Name -notlike '*.sig' } | Select-Object -First 1
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          $manifest = @{
+            version = $version
+            notes = "See https://github.com/hariom710/Veylora/releases/tag/${{ github.ref_name }}"
+            pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = @{
+              "windows-x86_64" = @{
+                signature = (Get-Content $sig.FullName -Raw).Trim()
+                url = "https://github.com/hariom710/Veylora/releases/download/${{ github.ref_name }}/$($exe.Name)"
+              }
+            }
+          } | ConvertTo-Json -Depth 4
+          # UTF-8 without BOM: serde_json rejects a BOM.
+          [System.IO.File]::WriteAllText("$PWD\latest.json", $manifest, (New-Object System.Text.UTF8Encoding $false))
+          echo "path=$PWD\latest.json" >> $env:GITHUB_OUTPUT
+          Get-Content "$PWD\latest.json" -Raw
 
       - name: Sign installer (if certificate available)
         id: sign
@@ -72,5 +104,7 @@ jobs:
           files: |
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/nsis/*.sha256
+            src-tauri/target/release/bundle/nsis/*.sig
+            latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
