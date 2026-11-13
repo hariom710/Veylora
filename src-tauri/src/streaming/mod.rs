@@ -24,6 +24,8 @@ pub enum StreamError {
     InvalidToken,
     #[error("file not found")]
     FileNotFound,
+    #[error("database error: {0}")]
+    Db(String),
     #[error("range request out of bounds")]
     RangeOutOfBounds,
     #[error("authentication failed on chunk")]

@@ -64,6 +64,7 @@ pub fn handle_protocol_request(
                 StreamError::MidStreamLock => (403, Vec::new()),
                 StreamError::AuthFailed => (403, Vec::new()),
                 StreamError::UrlParse(_) => (400, Vec::new()),
+                StreamError::Db(_) => (500, Vec::new()),
             };
             Response::builder().status(status).body(body).unwrap()
         }

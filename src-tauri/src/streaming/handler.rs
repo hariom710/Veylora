@@ -70,7 +70,7 @@ pub fn handle_request(
             },
         )
         .optional()
-        .unwrap()
+        .map_err(|e| StreamError::Db(e.to_string()))?
         .ok_or(StreamError::FileNotFound)?;
 
     // 5. Get total length from the file record

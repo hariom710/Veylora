@@ -58,7 +58,6 @@ pub struct VaultPublicMeta {
 }
 
 /// Create a new vault at `path` with PIN and password.
-#[allow(dead_code)]
 pub fn vault_create(
     _name: String,
     path: String,
@@ -126,7 +125,6 @@ pub fn vault_create(
 }
 
 /// Open an existing vault (read metadata only, set current path).
-#[allow(dead_code)]
 pub fn vault_open(path: String, session: Arc<SessionManager>) -> Result<VaultInfo, String> {
     let vdir = VaultDir::new(std::path::Path::new(&path).to_path_buf());
     let meta_path = &vdir.meta_path;
@@ -149,7 +147,6 @@ pub fn vault_open(path: String, session: Arc<SessionManager>) -> Result<VaultInf
 }
 
 /// Unlock with PIN.
-#[allow(dead_code)]
 pub fn vault_unlock_pin(pin: String, session: Arc<SessionManager>) -> Result<UnlockResult, String> {
     let path = session
         .current_path()
@@ -184,7 +181,6 @@ pub fn vault_unlock_pin(pin: String, session: Arc<SessionManager>) -> Result<Unl
 }
 
 /// Unlock with password.
-#[allow(dead_code)]
 pub fn vault_unlock_password(
     password: String,
     session: Arc<SessionManager>,
@@ -222,7 +218,6 @@ pub fn vault_unlock_password(
 }
 
 /// Unlock with recovery key.
-#[allow(dead_code)]
 pub fn vault_unlock_recovery(
     recovery_key: String,
     session: Arc<SessionManager>,
@@ -261,14 +256,12 @@ pub fn vault_unlock_recovery(
 }
 
 /// Lock the vault: zeroize MVK, drop session.
-#[allow(dead_code)]
 pub fn vault_lock(session: Arc<SessionManager>) -> Result<(), String> {
     session.lock();
     Ok(())
 }
 
 /// Vault status: locked/unlocked, vault_id, file_count, storage_used.
-#[allow(dead_code)]
 pub fn vault_status(session: Arc<SessionManager>) -> Result<StatusInfo, String> {
     let locked = session.is_locked();
     let vault_id = session.vault_id();
@@ -291,7 +284,6 @@ pub fn vault_status(session: Arc<SessionManager>) -> Result<StatusInfo, String> 
 }
 
 /// Public vault metadata (no keys).
-#[allow(dead_code)]
 pub fn vault_get_meta(path: String) -> Result<VaultPublicMeta, String> {
     let vdir = VaultDir::new(std::path::Path::new(&path).to_path_buf());
     let meta_path = &vdir.meta_path;
