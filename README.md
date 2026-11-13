@@ -316,7 +316,7 @@ Results from the full verification run (12–13 November 2026, Windows x64) - al
 | `pnpm typecheck` (`tsc --noEmit`) | **0 errors** (193 latent errors were hidden behind a broken config flag) | — |
 | CI (`.github/workflows/ci.yml`) | Frontend: typecheck + lint + tests + build (Ubuntu); Rust: `fmt --check` + clippy `-D warnings` + tests; Windows: full packaged build **+ installed-app CDP smoke (browser E2E)** | — |
 | Packaged-app smoke (WebView2 CDP automation) | **Exit 0** on the final installer — first-run wipe → login → create vault → recovery → import → image viewer renders (64×64) → `vault://` fetch returns 200 → lock → keypad unlock → dashboard shows `1 files encrypted \| Storage: 494 B` | Committed as [`scripts/smoke.ps1`](scripts/smoke.ps1) (parameterized exe path, vault, creds, port, shot dir; asserts and non-zero exit on failure); run manually against the installed app |
-| Installer SHA-256 | `f84a3399…8f1c` for the locally verified build; each GitHub Release prints the hash of the asset it ships (plus a `.sha256` sidecar) | — |
+| Installer SHA-256 | `62cd375f…97c7c` for the locally verified build; each GitHub Release prints the hash of the asset it ships (plus a `.sha256` sidecar) | — |
 | Icon embedding | Verified by extracting the icon from **both** the built and the installed exe | Manual |
 | Test-data hygiene | Test vault and WebView2 localStorage wiped after every smoke run | — |
 
