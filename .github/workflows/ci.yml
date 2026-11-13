@@ -38,6 +38,16 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm tauri build
+      # Server 2025 runner images don't guarantee the WebView2 Runtime; the
+      # smoke needs it to boot the app's webview. Idempotent bootstrapper.
+      - name: Ensure WebView2 Runtime
+        run: |
+          $k = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+          if (Test-Path $k) { Write-Host "WebView2 Runtime already installed"; exit 0 }
+          $setup = "$env:TEMP\webview2_runtime.exe"
+          Invoke-WebRequest "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile $setup
+          $p = Start-Process $setup -ArgumentList '/silent','/install' -Wait -PassThru
+          exit $p.ExitCode
       # Browser-level E2E: install the artifact just built and drive the
       # packaged WebView2 over CDP with scripts/smoke.ps1 (9 assertions,
       # exits non-zero on any failure).

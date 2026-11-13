@@ -63,12 +63,7 @@ fn check_db_integrity(db_path: &Path) -> Result<bool, CrashError> {
     let integrity_result =
         conn.query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0));
     match integrity_result {
-        Ok(result) => {
-            if result != "ok" {
-                return Ok(false);
-            }
-            Ok(true)
-        }
+        Ok(result) => Ok(result == "ok"),
         Err(_) => Ok(false),
     }
 }

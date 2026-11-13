@@ -34,7 +34,7 @@
 
 **Why Rust + Tauri.** Key material lives in RAM, so the platform matters. Rust gives memory safety plus zero-cost `zeroize` (keys are wiped the instant the vault locks); the RustCrypto crates supply Argon2id, XChaCha20-Poly1305 and HKDF with no C toolchain; `rusqlite` bundles SQLite so there is no system dependency. Tauri keeps the shell tiny — the installer is ~3.2 MB and the UI runs on Windows' preinstalled WebView2 instead of a bundled browser.
 
-**Maturity.** This is a **functional v1.0.0 suitable for personal use**: the NSIS installer builds, installs and launches; **168 Rust + 70 frontend tests pass**; and a full packaged-app smoke run (first-run wipe → login → vault creation → recovery → import → viewer render → lock → keypad unlock → dashboard counts) exits green on the final artifact. The security review is **internal** ([`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md)), not an external audit; the installer is unsigned; and known issues are listed under [Limitations](#-limitations-and-known-issues).
+**Maturity.** This is a **functional v1.0.0 suitable for personal use**: the NSIS installer builds, installs and launches; **169 Rust + 70 frontend tests pass**; and a full packaged-app smoke run (first-run wipe → login → vault creation → recovery → import → viewer render → lock → keypad unlock → dashboard counts) exits green on the final artifact. The security review is **internal** ([`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md)), not an external audit; the installer is unsigned; and known issues are listed under [Limitations](#-limitations-and-known-issues).
 
 **Deliberately out of scope:** cloud sync, incremental backup, and an auto-backup scheduler. Veylora is local-only by design.
 
@@ -238,7 +238,7 @@ Quality checks (run from the repository root):
 ```powershell
 pnpm typecheck            # tsc --noEmit — must report 0 errors
 pnpm test                 # 70 frontend tests (Vitest + jsdom)
-build.bat test            # 168 Rust tests, via the MSVC environment wrapper
+build.bat test            # 169 Rust tests, via the MSVC environment wrapper
 pnpm build                # production frontend bundle
 build.bat tauri build     # release binary + NSIS installer
 ```
@@ -312,7 +312,7 @@ Results from the full verification run (12–13 November 2026, Windows x64) - al
 | Check | Result | Coverage limitation |
 |---|---|---|
 | `pnpm test` | **70/70 passed** (16 files) | jsdom component + unit tests; real-browser E2E covered by the packaged smoke row below |
-| `cargo test` | **168 passed, 0 failed, 2 ignored** | Offline and deterministic by design |
+| `cargo test` | **169 passed, 0 failed, 2 ignored** | Offline and deterministic by design |
 | `pnpm typecheck` (`tsc --noEmit`) | **0 errors** (193 latent errors were hidden behind a broken config flag) | — |
 | CI (`.github/workflows/ci.yml`) | Frontend: typecheck + lint + tests + build (Ubuntu); Rust: `fmt --check` + clippy `-D warnings` + tests; Windows: full packaged build **+ installed-app CDP smoke (browser E2E)** | — |
 | Packaged-app smoke (WebView2 CDP automation) | **Exit 0** on the final installer — first-run wipe → login → create vault → recovery → import → image viewer renders (64×64) → `vault://` fetch returns 200 → lock → keypad unlock → dashboard shows `1 files encrypted \| Storage: 494 B` | Committed as [`scripts/smoke.ps1`](scripts/smoke.ps1) (parameterized exe path, vault, creds, port, shot dir; asserts and non-zero exit on failure); run manually against the installed app |

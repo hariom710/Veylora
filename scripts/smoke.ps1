@@ -90,9 +90,24 @@ $bmp.Dispose()
 
 $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$Port"
 Start-Process $ExePath
-Start-Sleep -Seconds 6
-
-$list = @(Invoke-RestMethod "http://127.0.0.1:$Port/json/list" -TimeoutSec 10)
+# CDP can take a while on a cold first boot; poll for up to 60s instead of
+# a single guess-and-hope attempt.
+$list = $null
+$connected = $false
+$deadline = (Get-Date).AddSeconds(60)
+while ((Get-Date) -lt $deadline) {
+  try {
+    $list = @(Invoke-RestMethod "http://127.0.0.1:$Port/json/list" -TimeoutSec 5)
+    $connected = $true
+    break
+  } catch { Start-Sleep -Seconds 2 }
+}
+if (-not $connected) {
+  $app = Get-Process veylora -ErrorAction SilentlyContinue
+  $wv = @(Get-Process msedgewebview2 -ErrorAction SilentlyContinue)
+  Write-Output "CDP never came up: veyloraRunning=$([bool]$app) webview2Processes=$($wv.Count) port=$Port"
+  exit 1
+}
 $target = $list | Where-Object { $_.type -eq 'page' } | Select-Object -First 1
 if (-not $target) { Write-Output "NO TARGET"; exit 1 }
 $ws = New-Object System.Net.WebSockets.ClientWebSocket
