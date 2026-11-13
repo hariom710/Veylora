@@ -307,16 +307,16 @@ Veylora is a **fully local application**: no accounts on any server, no analytic
 
 ## 🧪 Testing and verification
 
-Results from the full verification run (12 November 2026, Windows x64) — all freshly executed, none historical:
+Results from the full verification run (12–13 November 2026, Windows x64) - all freshly executed, none historical:
 
 | Check | Result | Coverage limitation |
 |---|---|---|
 | `pnpm test` | **70/70 passed** (16 files) | jsdom component + unit tests; no real browser E2E |
 | `cargo test` | **168 passed, 0 failed, 2 ignored** | Offline and deterministic by design |
 | `pnpm typecheck` (`tsc --noEmit`) | **0 errors** (193 latent errors were hidden behind a broken config flag) | — |
-| CI (`.github/workflows/ci.yml`) | Frontend: typecheck + lint + tests + build (Ubuntu); Rust: `fmt --check` + clippy `-D warnings` + tests, plus the full packaged build (Windows) | — |
+| CI (`.github/workflows/ci.yml`) | Frontend: typecheck + lint + tests + build (Ubuntu); Rust: `fmt --check` + clippy `-D warnings` + tests; Windows: full packaged build **+ installed-app CDP smoke (browser E2E)** | — |
 | Packaged-app smoke (WebView2 CDP automation) | **Exit 0** on the final installer — first-run wipe → login → create vault → recovery → import → image viewer renders (64×64) → `vault://` fetch returns 200 → lock → keypad unlock → dashboard shows `1 files encrypted \| Storage: 494 B` | Committed as [`scripts/smoke.ps1`](scripts/smoke.ps1) (parameterized exe path, vault, creds, port, shot dir; asserts and non-zero exit on failure); run manually against the installed app |
-| Installer SHA-256 | `3a546e3c…c13d` published in `RELEASE_NOTES.md` + `.sha256` sidecar | — |
+| Installer SHA-256 | `f84a3399…8f1c` published in `RELEASE_NOTES.md` + `.sha256` sidecar | — |
 | Icon embedding | Verified by extracting the icon from **both** the built and the installed exe | Manual |
 | Test-data hygiene | Test vault and WebView2 localStorage wiped after every smoke run | — |
 
@@ -328,7 +328,7 @@ Results from the full verification run (12 November 2026, Windows x64) — all f
 
 1. **Windows-only** — WebView2, NSIS, and Windows path semantics; other operating systems are unsupported.
 2. **Distribution gaps** — no code signing (SmartScreen warning) and no auto-update; verify the SHA-256 from `RELEASE_NOTES.md` after every download. A single-instance lock keeps two launches from sharing vault state.
-3. **Deferred by design** — Windows Hello unlock, Windows session-lock detection, incremental backup, auto-backup scheduler, and cloud sync are explicitly out of scope for v1.0 (see [Roadmap](#-roadmap) and `docs/SECURITY_REVIEW.md`).
+3. **Deferred by design** — Windows Hello unlock, incremental backup, auto-backup scheduler, and cloud sync are explicitly out of scope for v1.0 (see [Roadmap](#-roadmap) and `docs/SECURITY_REVIEW.md`).
 4. **Recovery-key loss** — if the PIN, password, and recovery key are all lost, the data is unrecoverable; this is a feature of the design, not a bug.
 
 ---
@@ -343,8 +343,8 @@ Results from the full verification run (12 November 2026, Windows x64) — all f
 
 - [ ] Windows Hello unlock (TPM/DPAPI work — needs independent review before shipping)
 - [ ] Signed installer + Tauri auto-update
-- [ ] Windows session-lock detection (WTS) for instant auto-lock
-- [ ] Browser-based E2E suite
+- [x] Windows session-lock detection (WTS) for instant auto-lock
+- [x] Browser-based E2E suite
 
 ---
 

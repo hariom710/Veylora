@@ -35,7 +35,7 @@ initiates an export of a file to a location of their choice.
 2. Verify the SHA-256 hash matches the value published below:
 
    ```
-   SHA-256: 3a546e3c9139b5344759631b5121a2133de74f22a825a01e40cce8e78b41c13d
+   SHA-256: f84a3399968c19364f0db9801cd0bc38976bdd0c981f1713ada4d06821b68f1c
    ```
 
    Verify with:
@@ -65,8 +65,6 @@ tampered with in transit.
   are the supported unlock methods.
 - **Auto-update**: Not available in v1.0. Check GitHub Releases for new
   versions and verify the SHA-256 before installing.
-- **Windows session-lock**: Polling-based auto-lock on session lock is
-  deferred to v1.1 due to Windows API limitations in the build environment.
 - **Browser E2E**: Not run in v1.0. Backend end-to-end tests substitute for
   browser E2E testing.
 - **Recovery key loss**: If you lose all credentials (PIN, password, and

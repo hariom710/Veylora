@@ -38,6 +38,16 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm tauri build
+      # Browser-level E2E: install the artifact just built and drive the
+      # packaged WebView2 over CDP with scripts/smoke.ps1 (9 assertions,
+      # exits non-zero on any failure).
+      - name: Install packaged build
+        run: |
+          $setup = (Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1).FullName
+          $p = Start-Process $setup -ArgumentList '/S' -Wait -PassThru
+          exit $p.ExitCode
+      - name: Packaged smoke (CDP E2E)
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/smoke.ps1
 
   rust:
     runs-on: windows-latest
