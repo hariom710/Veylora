@@ -35,7 +35,7 @@ initiates an export of a file to a location of their choice.
 2. Verify the SHA-256 hash matches the value published below:
 
    ```
-   SHA-256: e05e76301c6e2dfb4f191893cd3b838282f28e7d2965676f30322eefa9a9ae3e
+   SHA-256: 3a546e3c9139b5344759631b5121a2133de74f22a825a01e40cce8e78b41c13d
    ```
 
    Verify with:

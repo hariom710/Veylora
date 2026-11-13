@@ -314,9 +314,9 @@ Results from the full verification run (12 November 2026, Windows x64) — all f
 | `pnpm test` | **70/70 passed** (16 files) | jsdom component + unit tests; no real browser E2E |
 | `cargo test` | **168 passed, 0 failed, 2 ignored** | Offline and deterministic by design |
 | `pnpm typecheck` (`tsc --noEmit`) | **0 errors** (193 latent errors were hidden behind a broken config flag) | — |
-| CI (`.github/workflows/ci.yml`) | Frontend: typecheck + tests + build (Ubuntu); Rust: `fmt --check` + clippy `-D warnings` + tests, plus the full packaged build (Windows) | — |
-| Packaged-app smoke (WebView2 CDP automation) | **Exit 0** on the final installer — first-run wipe → login → create vault → recovery → import → image viewer renders (64×64) → `vault://` fetch returns 200 → lock → keypad unlock → dashboard shows `1 files encrypted \| Storage: 492 B` | Run manually; the script holds machine-local paths and is not committed |
-| Installer SHA-256 | `e05e7630…ae3e` published in `RELEASE_NOTES.md` + `.sha256` sidecar | — |
+| CI (`.github/workflows/ci.yml`) | Frontend: typecheck + lint + tests + build (Ubuntu); Rust: `fmt --check` + clippy `-D warnings` + tests, plus the full packaged build (Windows) | — |
+| Packaged-app smoke (WebView2 CDP automation) | **Exit 0** on the final installer — first-run wipe → login → create vault → recovery → import → image viewer renders (64×64) → `vault://` fetch returns 200 → lock → keypad unlock → dashboard shows `1 files encrypted \| Storage: 494 B` | Committed as [`scripts/smoke.ps1`](scripts/smoke.ps1) (parameterized exe path, vault, creds, port, shot dir; asserts and non-zero exit on failure); run manually against the installed app |
+| Installer SHA-256 | `3a546e3c…c13d` published in `RELEASE_NOTES.md` + `.sha256` sidecar | — |
 | Icon embedding | Verified by extracting the icon from **both** the built and the installed exe | Manual |
 | Test-data hygiene | Test vault and WebView2 localStorage wiped after every smoke run | — |
 
@@ -337,7 +337,7 @@ Results from the full verification run (12 November 2026, Windows x64) — all f
 
 ### P1 — correctness and quality
 
-- [ ] Parameterize and commit the packaged-app smoke script
+- [x] Parameterize and commit the packaged-app smoke script
 
 ### P2 — platform (deferred from the security review)
 
@@ -374,6 +374,7 @@ Issues and pull requests are welcome. Before submitting, make sure these pass lo
 
 ```powershell
 pnpm typecheck
+pnpm lint
 pnpm test
 build.bat test
 pnpm build
