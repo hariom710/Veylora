@@ -30,10 +30,31 @@ param(
 
 # No Set-StrictMode: CDP responses legitimately lack keys (error, exceptionDetails).
 $ErrorActionPreference = 'Stop'
+# Localhost must connect directly even if the host has a system proxy
+# (CI images may set one; Invoke-RestMethod would otherwise route through it).
+[System.Net.WebRequest]::DefaultWebProxy = $null
 $script:failures = New-Object System.Collections.Generic.List[string]
+$script:appProcess = $null
+$script:ws = $null
+$script:lastCdpError = $null
 function Check([string]$name, [bool]$cond) {
   if ($cond) { Write-Output "PASS: $name" }
   else { $script:failures.Add($name); Write-Output "FAIL: $name" }
+}
+function Cleanup {
+  if ($script:ws) {
+    $script:ws.Dispose()
+    $script:ws = $null
+  }
+  if ($script:appProcess -and -not $script:appProcess.HasExited) {
+    Stop-Process -Id $script:appProcess.Id -Force
+    Write-Output "CLEANUP: stopped veylora pid=$($script:appProcess.Id)"
+  }
+}
+trap {
+  Cleanup
+  Write-Output "SMOKE ERROR: $($_.Exception.Message)"
+  exit 1
 }
 
 Add-Type -AssemblyName System.Drawing
@@ -70,13 +91,17 @@ function Capture([IntPtr]$h, [string]$name) {
 function Js([string]$s) { return $s.Replace('\', '\\').Replace("'", "\'") }
 
 # --- True first-run: kill app, wipe localStorage, remove old test vault ---
-Get-Process veylora -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process veylora -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.Id -Force }
 Start-Sleep -Seconds 2
 $ls = "$env:LOCALAPPDATA\com.veylora.app\EBWebView\Default\Local Storage"
 if (Test-Path $ls) { Remove-Item $ls -Recurse -Force }
 if (Test-Path $VaultPath) { Remove-Item $VaultPath -Recurse -Force }
 Write-Output "first-run: localStorage=$(-not (Test-Path $ls)) oldVaultGone=$(-not (Test-Path $VaultPath))"
 Check 'first-run wipe' ((-not (Test-Path $ls)) -and (-not (Test-Path $VaultPath)))
+if ($Port -lt 1 -or $Port -gt 65535) {
+  Write-Output "INVALID CDP PORT: $Port (expected 1-65535)"
+  exit 1
+}
 if (-not (Test-Path $ExePath)) { Write-Output "EXE NOT FOUND: $ExePath"; exit 1 }
 
 # 64x64 PNG for the import (generated so the script has no machine deps).
@@ -88,45 +113,57 @@ $g.Dispose()
 $bmp.Save($imgPath, [System.Drawing.Imaging.ImageFormat]::Png)
 $bmp.Dispose()
 
-$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$Port"
-Start-Process $ExePath
+$env:VEYLORA_CDP_PORT = "$Port"
+$script:appProcess = Start-Process $ExePath -PassThru
 # CDP can take a while on a cold first boot; poll for up to 60s instead of
 # a single guess-and-hope attempt.
 $list = $null
 $connected = $false
+$lastCdpError = $null
 $deadline = (Get-Date).AddSeconds(60)
 while ((Get-Date) -lt $deadline) {
+  if ($script:appProcess.HasExited) {
+    throw "Veylora exited before CDP became available (exit code $($script:appProcess.ExitCode))"
+  }
   try {
     $list = @(Invoke-RestMethod "http://127.0.0.1:$Port/json/list" -TimeoutSec 5)
-    $connected = $true
-    break
-  } catch { Start-Sleep -Seconds 2 }
+    if ($list.Count -eq 0) {
+      $lastCdpError = 'CDP returned an empty target list'
+    } elseif (-not ($list | Where-Object { $_.type -eq 'page' -and $_.webSocketDebuggerUrl } | Select-Object -First 1)) {
+      $lastCdpError = 'CDP returned no page target with a websocket URL'
+    } else {
+      $connected = $true
+      break
+    }
+  } catch {
+    $lastCdpError = $_.Exception.Message
+  }
+  Start-Sleep -Seconds 1
 }
 if (-not $connected) {
   $app = Get-Process veylora -ErrorAction SilentlyContinue
   $wv = @(Get-Process msedgewebview2 -ErrorAction SilentlyContinue)
-  Write-Output "CDP never came up: veyloraRunning=$([bool]$app) webview2Processes=$($wv.Count) port=$Port"
-  exit 1
+  throw "CDP endpoint http://127.0.0.1:$Port/json/list unavailable after 60s: $lastCdpError; veyloraRunning=$([bool]$app) webview2Processes=$($wv.Count)"
 }
 $target = $list | Where-Object { $_.type -eq 'page' } | Select-Object -First 1
-if (-not $target) { Write-Output "NO TARGET"; exit 1 }
-$ws = New-Object System.Net.WebSockets.ClientWebSocket
+if (-not $target) { throw "CDP returned an unexpected response: no page target" }
+$script:ws = New-Object System.Net.WebSockets.ClientWebSocket
 $ct = [System.Threading.CancellationToken]::None
-$ws.ConnectAsync([Uri]$target.webSocketDebuggerUrl, $ct).Wait()
-if ($ws.State -ne [System.Net.WebSockets.WebSocketState]::Open) { Write-Output "WS NOT OPEN"; exit 1 }
+$script:ws.ConnectAsync([Uri]$target.webSocketDebuggerUrl, $ct).Wait()
+if ($script:ws.State -ne [System.Net.WebSockets.WebSocketState]::Open) { throw "CDP websocket did not open (state=$($script:ws.State))" }
 
 $script:msgId = 0
 function Send-Cdp([string]$json) {
   $buf = [Text.Encoding]::UTF8.GetBytes($json)
   $seg = New-Object 'System.ArraySegment[byte]' -ArgumentList @(, $buf)
-  $ws.SendAsync($seg, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $ct).Wait()
+  $script:ws.SendAsync($seg, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $ct).Wait()
 }
 function Recv-Cdp {
   $ms = New-Object IO.MemoryStream
   do {
     $buf = New-Object byte[] 65536
     $seg = New-Object 'System.ArraySegment[byte]' -ArgumentList @(, $buf)
-    $r = $ws.ReceiveAsync($seg, $ct); $r.Wait()
+    $r = $script:ws.ReceiveAsync($seg, $ct); $r.Wait()
     $ms.Write($buf, 0, $r.Result.Count)
     $done = $r.Result.EndOfMessage
   } while (-not $done)
@@ -233,10 +270,11 @@ Check 'dashboard shows file count + storage' (($counts -like '*files encrypted*'
 $p = Get-Process veylora -ErrorAction SilentlyContinue
 if ($p) { Capture $p.MainWindowHandle "smoke-dashboard" } else { Write-Output "APP GONE"; Check 'app still running' $false }
 
-$ws.Dispose()
 if ($script:failures.Count -gt 0) {
   Write-Output "SMOKE FAILED ($($script:failures.Count)): $($script:failures -join ', ')"
+  Cleanup
   exit 1
 }
+Cleanup
 Write-Output "DONE"
 exit 0

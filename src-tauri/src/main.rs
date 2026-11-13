@@ -3,6 +3,7 @@
 // shortcut. Debug keeps the console so tauri dev logs stay visible.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::env;
 use std::sync::Arc;
 use tauri::generate_context;
 use tauri::Manager;
@@ -332,6 +333,25 @@ fn main() {
     // (Win+L, RDP lock). See auth::session_lock.
     veylora::auth::session_lock::spawn_watcher(manager.clone());
 
+    let mut context = generate_context!();
+    if let Some(port) = env::var_os("VEYLORA_CDP_PORT") {
+        let port = port
+            .to_str()
+            .and_then(|value| value.parse::<u16>().ok())
+            .filter(|port| *port != 0)
+            .unwrap_or_else(|| panic!("VEYLORA_CDP_PORT must be a non-zero TCP port"));
+        let window = context
+            .config_mut()
+            .app
+            .windows
+            .first_mut()
+            .expect("Veylora requires a configured main window");
+        window.additional_browser_args = Some(format!(
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection \
+             --remote-debugging-port={port}"
+        ));
+    }
+
     tauri::Builder::default()
         // Must be registered first: a duplicate launch focuses this instance
         // instead of sharing vault/app-data state with a second copy.
@@ -431,6 +451,6 @@ fn main() {
             vault_backup_history_clear_cmd,
             vault_delete_cmd,
         ])
-        .run(generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
