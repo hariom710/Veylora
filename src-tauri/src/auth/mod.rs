@@ -11,6 +11,7 @@ pub mod password;
 pub mod pin;
 pub mod recovery;
 pub mod session;
+pub mod session_lock;
 pub mod throttle;
 
 /// How the vault was unlocked.

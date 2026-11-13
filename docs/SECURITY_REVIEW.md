@@ -65,7 +65,7 @@ improvement.
 |------|--------|-----------|
 | Windows Hello | Deferred to v1.1 | Complex TPM/DPAPI glue needs independent review |
 | Auto-update | Deferred to v1.1 | Update signature key compromise is a real attack surface |
-| Windows session-lock | Deferred to v1.1 | WTS integration not available in build environment |
+| Windows session-lock | Implemented (v1.0) | Event-driven `WM_WTSSESSION_CHANGE` (Win+L / RDP lock) locks the vault instantly; the OS unlock event never unlocks it |
 | Browser E2E | Deferred to v1.1 | Backend E2E tests substitute |
 
 ### Non-Goals (Confirmed Absent)

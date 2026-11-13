@@ -328,6 +328,9 @@ fn main() {
     // Auto-lock watcher: previously dead code (never spawned). Reads the
     // timeout from Settings on every tick (0 = never).
     veylora::auth::auto_lock::spawn_watcher(manager.clone());
+    // Session-lock watcher: locks the vault the moment the OS session locks
+    // (Win+L, RDP lock). See auth::session_lock.
+    veylora::auth::session_lock::spawn_watcher(manager.clone());
 
     tauri::Builder::default()
         // Must be registered first: a duplicate launch focuses this instance

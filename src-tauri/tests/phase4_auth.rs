@@ -457,17 +457,31 @@ fn phase4_with_mvk_zeroize_on_lock() {
 }
 
 #[test]
-fn phase4_windows_session_lock_deferred() {
-    // Windows session-lock (WM_WTSSESSION_CHANGE via windows crate) is
-    // deferred to Phase 8. This test documents the deferral.
-    //
-    // The Windows session-lock integration requires:
-    // 1. windows crate dependency
-    // 2. WTSRegisterSessionNotification callback
-    // 3. Integration with session lock on WM_WTSSESSION_CHANGE
-    //
-    // This is deferred because it requires Windows-specific API calls that
-    // are not needed for the core security functionality of Phase 4.
+fn phase4_windows_session_lock_locks_vault() {
+    // Replaces the old deferral placeholder: WM_WTSSESSION_CHANGE is now
+    // wired up (auth::session_lock); only the event delivery is OS-side.
+    use veylora::auth::session_lock::{on_session_change, WTS_SESSION_LOCK, WTS_SESSION_UNLOCK};
+
+    let manager = std::sync::Arc::new(SessionManager::new());
+    let tmp = setup_vault_dir();
+    let vault_path = tmp.join("vault");
+    veylora::commands::vault_create(
+        "t".to_string(),
+        vault_path.to_string_lossy().into_owned(),
+        "1234".to_string(),
+        "pw".to_string(),
+        manager.clone(),
+    )
+    .expect("vault_create should succeed");
+    assert!(!manager.is_locked(), "fresh session starts unlocked");
+
+    // OS session lock (Win+L / RDP lock) locks the vault...
+    assert!(on_session_change(&manager, WTS_SESSION_LOCK));
+    assert!(manager.is_locked(), "session lock must lock the vault");
+
+    // ...and the OS unlock event must never unlock it.
+    assert!(!on_session_change(&manager, WTS_SESSION_UNLOCK));
+    assert!(manager.is_locked(), "OS unlock must not unlock the vault");
 }
 
 #[test]

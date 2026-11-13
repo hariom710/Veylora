@@ -4337,6 +4337,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "thiserror 1.0.69",
  "typenum",
+ "windows",
  "zeroize",
 ]
 
