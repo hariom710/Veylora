@@ -49,15 +49,13 @@ const LOGGED_OUT = {
   email: null,
   role: null,
   logged_in_since: null,
-  used_default_password: false,
 };
 
 const LOGGED_IN = {
   logged_in: true,
-  email: 'b1865741@gmail.com',
+  email: 'admin@example.com',
   role: 'admin',
   logged_in_since: 1762700000,
-  used_default_password: false,
 };
 
 describe('phase9 app login gate', () => {
@@ -101,12 +99,12 @@ describe('phase9 app login gate', () => {
     render(<App />);
 
     await screen.findByText('Your Files. Your Privacy. Your Control.');
-    await user.type(screen.getByLabelText('Email'), 'b1865741@gmail.com');
-    await user.type(screen.getByLabelText('Password'), 'Harry@12345');
+    await user.type(screen.getByLabelText('Email'), 'admin@example.com');
+    await user.type(screen.getByLabelText('Password'), 'longenough1');
     await user.click(screen.getByRole('button', { name: /Sign in/i }));
 
     expect(await screen.findByRole('heading', { name: /Create Vault/i })).toBeInTheDocument();
-    expect(appLogin).toHaveBeenCalledWith('b1865741@gmail.com', 'Harry@12345');
+    expect(appLogin).toHaveBeenCalledWith('admin@example.com', 'longenough1');
   });
 
   it('signup validates length and confirmation client-side', async () => {

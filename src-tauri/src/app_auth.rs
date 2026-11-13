@@ -12,12 +12,6 @@ use subtle::ConstantTimeEq;
 
 use crate::crypto::kdf::derive_password_kek;
 
-/// Seeded on first run with role `admin`. The UI nudges changing it.
-pub const ADMIN_EMAIL: &str = "b1865741@gmail.com";
-pub const ADMIN_DEFAULT_PASSWORD: &str = "Harry@12345";
-/// Default admin PIN (4–6 digits). Changed from vault PIN on first-run.
-pub const ADMIN_DEFAULT_PIN: &str = "1729";
-
 const MIN_PASSWORD_LEN: usize = 8;
 
 /// Login state reported to the UI.
@@ -27,7 +21,6 @@ pub struct AppStatus {
     pub email: Option<String>,
     pub role: Option<String>,
     pub logged_in_since: Option<u64>,
-    pub used_default_password: bool,
 }
 
 /// One row of the admin user table.
@@ -45,7 +38,6 @@ struct AppSession {
     email: String,
     role: String,
     logged_in_since: u64,
-    used_default_password: bool,
 }
 
 /// Layer-1 session manager. One instance, owned by Tauri as managed state.
@@ -88,24 +80,7 @@ impl AppAuth {
             );",
         )
         .map_err(|e| e.to_string())?;
-        self.seed_admin(&conn)?;
         Ok(conn)
-    }
-
-    fn seed_admin(&self, conn: &Connection) -> Result<(), String> {
-        let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM app_users", [], |r| r.get(0))
-            .map_err(|e| e.to_string())?;
-        if count == 0 {
-            let hash = hash_password(ADMIN_DEFAULT_PASSWORD)?;
-            conn.execute(
-                "INSERT INTO app_users (email, password_hash, role, created_at)
-                 VALUES (?1, ?2, 'admin', ?3)",
-                rusqlite::params![ADMIN_EMAIL, hash, now_unix() as i64],
-            )
-            .map_err(|e| e.to_string())?;
-        }
-        Ok(())
     }
 
     pub fn status(&self) -> AppStatus {
@@ -115,14 +90,12 @@ impl AppAuth {
                 email: Some(s.email),
                 role: Some(s.role),
                 logged_in_since: Some(s.logged_in_since),
-                used_default_password: s.used_default_password,
             },
             None => AppStatus {
                 logged_in: false,
                 email: None,
                 role: None,
                 logged_in_since: None,
-                used_default_password: false,
             },
         }
     }
@@ -151,22 +124,23 @@ impl AppAuth {
         )
         .map_err(|e| e.to_string())?;
 
-        let used_default =
-            email.eq_ignore_ascii_case(ADMIN_EMAIL) && password == ADMIN_DEFAULT_PASSWORD;
         *self.session.lock().unwrap() = Some(AppSession {
             email: email.to_string(),
             role,
             logged_in_since: now_unix(),
-            used_default_password: used_default,
         });
         Ok(self.status())
     }
 
-    /// Signup always creates role `user` (admin accounts come from an
-    /// existing admin session via `create_user`).
+    /// The first account on a fresh install becomes `admin` — with no seed
+    /// there is no other way to get one. Every later signup is `user`.
     pub fn signup(&self, email: &str, password: &str) -> Result<(), String> {
         let conn = self.open()?;
-        self.insert_user(&conn, email, password, "user")
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM app_users", [], |r| r.get(0))
+            .map_err(|e| e.to_string())?;
+        let role = if count == 0 { "admin" } else { "user" };
+        self.insert_user(&conn, email, password, role)
     }
 
     /// Admin-only user creation from Account → Users.
@@ -247,10 +221,6 @@ impl AppAuth {
             rusqlite::params![session.email, hash],
         )
         .map_err(|e| e.to_string())?;
-        // The default-password banner clears once it is actually changed.
-        if let Some(s) = self.session.lock().unwrap().as_mut() {
-            s.used_default_password = false;
-        }
         Ok(())
     }
 

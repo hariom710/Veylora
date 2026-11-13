@@ -46,7 +46,7 @@
 
 ### 🔒 Three-layer security model
 
-- **Layer 1 — App login.** Email + password in front of every screen. Passwords are Argon2id-hashed with a fresh 32-byte salt per password and verified in constant time; roles (`admin`/`user`) are enforced **server-side**; login errors are uniform; brute-force throttling with exponential backoff is persisted across restarts. A seeded admin account shows an in-app warning until you change the default password.
+- **Layer 1 — App login.** Email + password in front of every screen. Passwords are Argon2id-hashed with a fresh 32-byte salt per password and verified in constant time; roles (`admin`/`user`) are enforced **server-side**; login errors are uniform; brute-force throttling with exponential backoff is persisted across restarts. No account exists on a fresh install — the first sign-up becomes the admin, and no default credentials ship in the app.
 - **Layer 2 — Vault gate.** Create a new vault or open an existing one by path, then unlock with a **PIN keypad (4–6 digits)**, a **master password (≥ 8 characters)**, or a **one-time recovery key** — 56 characters of base32 plus a SHA-256 checksum, displayed exactly once at creation and never re-displayable.
 - **Layer 3 — Encryption at rest.** All three credentials unwrap the same **Master Vault Key (MVK)** into RAM. The MVK never crosses the IPC boundary and is zeroized on lock.
 
@@ -257,7 +257,7 @@ Notes:
 ## 🚀 Usage walkthrough
 
 1. **Launch** the installed app. Every cold start begins at the **Layer-1 login** (the session is in-memory only).
-2. **Sign in** — a default admin account is seeded on first run; the app warns you until you change its password in **Settings**. *Sign up* on the login screen creates additional users.
+2. **Sign up, then sign in** — a fresh install has no accounts: the first sign-up creates the admin (later sign-ups create regular users), then you sign in with it.
 3. **Create a vault** — name, folder path, a 4–6 digit PIN, and a master password (≥ 8 characters). *Open Vault* loads an existing vault instead.
 4. **Save the recovery key** — shown **exactly once**; confirm the checkbox to continue. Without it, a forgotten PIN/password pair means the vault is unrecoverable by design.
 5. **Dashboard** — stat cards show file count, storage used, and last backup. Import via **Import Files**, the **drag-and-drop zone**, or <kbd>Ctrl</kbd>+<kbd>O</kbd>.
@@ -319,7 +319,7 @@ Results from the full verification run (12–13 November 2026, Windows x64) - al
 | `pnpm typecheck` (`tsc --noEmit`) | **0 errors** (193 latent errors were hidden behind a broken config flag) | — |
 | CI (`.github/workflows/ci.yml`) | Frontend: typecheck + lint + tests + build (Ubuntu); Rust: `fmt --check` + clippy `-D warnings` + tests; Windows: full packaged build **+ installed-app CDP smoke (browser E2E)** | — |
 | Packaged-app smoke (WebView2 CDP automation) | **Exit 0** on the final installer — first-run wipe → login → create vault → recovery → import → image viewer renders (64×64) → `vault://` fetch returns 200 → lock → keypad unlock → dashboard shows `1 files encrypted \| Storage: 494 B` | Committed as [`scripts/smoke.ps1`](scripts/smoke.ps1) (parameterized exe path, vault, creds, port, shot dir; asserts and non-zero exit on failure); CI sets `VEYLORA_CDP_PORT` so production launches do not expose CDP |
-| Installer SHA-256 | `E4D94C91…9F0F6` for the locally verified build; each GitHub Release prints the hash of the asset it ships (plus a `.sha256` sidecar) | — |
+| Installer SHA-256 | `CA5EFC8B…B4DCA` for the locally verified build; each GitHub Release prints the hash of the asset it ships (plus a `.sha256` sidecar) | — |
 | Icon embedding | Verified by extracting the icon from **both** the built and the installed exe | Manual |
 | Test-data hygiene | Test vault and WebView2 localStorage wiped after every smoke run | — |
 
@@ -362,7 +362,6 @@ Results from the full verification run (12–13 November 2026, Windows x64) - al
 | Vault locks while you are reading | Auto-lock timer elapsed | Re-unlock; raise the timeout in **Settings** (1/5/15/30 min) |
 | Viewer shows 403 / goes blank after locking | Mid-stream lock (by design) | Unlock and reopen the file |
 | Forgot PIN or master password | — | Unlock with the **recovery key** (Settings shows the flow); if all three are lost, the vault is unrecoverable by design |
-| "Admin account is using the default password" banner | Seeded first-run account | **Settings → change password** |
 | `build.bat` reports no MSVC toolchain | Missing C++ build tools | Install VS Build Tools with *Desktop development with C++* + Windows SDK |
 | `pnpm test` fails to start | Dependencies not installed | `pnpm install` |
 | Import fails silently | Vault locked or disk full | Unlock the vault, check free space, and watch the toast/error banner on the Dashboard |

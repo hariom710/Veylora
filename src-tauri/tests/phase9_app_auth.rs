@@ -1,12 +1,12 @@
 //! Phase 9 integration tests: Layer-1 app login (app_users).
 //!
 //! Covers: signup/login/logout, uniform login errors, duplicate email,
-//! seeded default admin flag, password change, and admin user-management
+//! first-signup-becomes-admin, password change, and admin user-management
 //! constraints. Uses a temp app DB — never the real %APPDATA% location.
 
 use std::path::PathBuf;
 
-use veylora::app_auth::{AppAuth, ADMIN_DEFAULT_PASSWORD, ADMIN_EMAIL};
+use veylora::app_auth::AppAuth;
 
 fn tmp_db(tag: &str) -> PathBuf {
     let dir = std::env::current_dir().unwrap().join(format!(
@@ -37,10 +37,10 @@ fn phase9_signup_login_logout_roundtrip() {
         .expect("login should succeed");
     assert!(status.logged_in);
     assert_eq!(status.email.as_deref(), Some("user@example.com"));
-    assert_eq!(status.role.as_deref(), Some("user"));
-    assert!(
-        !status.used_default_password,
-        "regular user has no default flag"
+    assert_eq!(
+        status.role.as_deref(),
+        Some("admin"),
+        "first account on an empty install becomes the admin"
     );
 
     auth.logout();
@@ -53,8 +53,12 @@ fn phase9_signup_login_logout_roundtrip() {
 fn phase9_login_error_identical_for_unknown_email_and_wrong_password() {
     let auth = AppAuth::with_db_path(tmp_db("uniform-error"));
 
+    auth.signup("known@example.com", "longenough")
+        .expect("signup");
     let unknown = auth.login("nobody@example.com", "whatever123").unwrap_err();
-    let wrong = auth.login(ADMIN_EMAIL, "definitely-wrong").unwrap_err();
+    let wrong = auth
+        .login("known@example.com", "definitely-wrong")
+        .unwrap_err();
 
     assert_eq!(unknown, "Invalid email or password");
     assert_eq!(unknown, wrong, "must not reveal whether the account exists");
@@ -78,50 +82,64 @@ fn phase9_duplicate_email_rejected_case_insensitive() {
 }
 
 #[test]
-fn phase9_seeded_default_admin_login_flagged() {
-    let auth = AppAuth::with_db_path(tmp_db("seed"));
+fn phase9_first_signup_is_admin_later_signups_are_users() {
+    let auth = AppAuth::with_db_path(tmp_db("first-admin"));
 
-    // First DB open seeds the default admin.
+    // Nothing is seeded: the empty DB logs nobody in by default.
+    assert!(!auth.status().logged_in, "fresh install starts logged out");
+
+    auth.signup("boss@example.com", "longenough")
+        .expect("first signup succeeds");
     let status = auth
-        .login(ADMIN_EMAIL, ADMIN_DEFAULT_PASSWORD)
-        .expect("seeded admin can log in");
-    assert_eq!(status.role.as_deref(), Some("admin"));
-    assert!(
-        status.used_default_password,
-        "default-password banner flag is set"
+        .login("boss@example.com", "longenough")
+        .expect("first account logs in");
+    assert_eq!(
+        status.role.as_deref(),
+        Some("admin"),
+        "first account becomes the admin"
     );
 
-    let _ = std::fs::remove_dir_all(tmp_db("seed").parent().unwrap());
+    auth.logout();
+    auth.signup("worker@example.com", "longenough")
+        .expect("second signup succeeds");
+    let status = auth
+        .login("worker@example.com", "longenough")
+        .expect("second account logs in");
+    assert_eq!(
+        status.role.as_deref(),
+        Some("user"),
+        "later signups are regular users"
+    );
+
+    let _ = std::fs::remove_dir_all(tmp_db("first-admin").parent().unwrap());
 }
 
 #[test]
-fn phase9_change_password_invalidates_old_and_clears_flag() {
+fn phase9_change_password_invalidates_old() {
     let auth = AppAuth::with_db_path(tmp_db("chpw"));
 
-    auth.login(ADMIN_EMAIL, ADMIN_DEFAULT_PASSWORD)
-        .expect("seeded admin logs in");
+    auth.signup("boss@example.com", "longenough")
+        .expect("first signup is admin");
+    auth.login("boss@example.com", "longenough")
+        .expect("admin logs in");
 
     let err = auth
         .change_password("not-the-old-one", "brandnew123")
         .unwrap_err();
     assert_eq!(err, "Invalid password");
 
-    auth.change_password(ADMIN_DEFAULT_PASSWORD, "brandnew123")
+    auth.change_password("longenough", "brandnew123")
         .expect("change with correct old password");
-    assert!(
-        !auth.status().used_default_password,
-        "banner flag clears after change"
-    );
 
     auth.logout();
     assert!(
-        auth.login(ADMIN_EMAIL, ADMIN_DEFAULT_PASSWORD).is_err(),
+        auth.login("boss@example.com", "longenough").is_err(),
         "old password no longer works"
     );
     let status = auth
-        .login(ADMIN_EMAIL, "brandnew123")
+        .login("boss@example.com", "brandnew123")
         .expect("new password works");
-    assert!(!status.used_default_password);
+    assert_eq!(status.role.as_deref(), Some("admin"));
 
     let _ = std::fs::remove_dir_all(tmp_db("chpw").parent().unwrap());
 }
@@ -129,14 +147,16 @@ fn phase9_change_password_invalidates_old_and_clears_flag() {
 #[test]
 fn phase9_admin_delete_constraints() {
     let auth = AppAuth::with_db_path(tmp_db("delete"));
-    auth.login(ADMIN_EMAIL, ADMIN_DEFAULT_PASSWORD)
-        .expect("seeded admin logs in");
+    auth.signup("boss@example.com", "longenough")
+        .expect("first signup is admin");
+    auth.login("boss@example.com", "longenough")
+        .expect("admin logs in");
 
     let users = auth.list_users().expect("admin can list users");
     let own_id = users
         .iter()
-        .find(|u| u.email == ADMIN_EMAIL)
-        .expect("seeded admin row exists")
+        .find(|u| u.email == "boss@example.com")
+        .expect("admin row exists")
         .id;
 
     // Only one admin exists: even an admin cannot remove the last one.
@@ -169,8 +189,11 @@ fn phase9_admin_delete_constraints() {
 fn phase9_non_admin_cannot_administer() {
     let auth = AppAuth::with_db_path(tmp_db("user-role"));
 
+    // First account claims the admin role; the second is an ordinary user.
+    auth.signup("boss@example.com", "longenough")
+        .expect("first signup (admin)");
     auth.signup("plain@example.com", "longenough")
-        .expect("signup");
+        .expect("second signup (user)");
     auth.login("plain@example.com", "longenough")
         .expect("user logs in");
 

@@ -39,13 +39,7 @@ function folderLabel(p: string): string {
   return parts[parts.length - 1] || p;
 }
 
-export default function Welcome({
-  adminDefault = false,
-  onCreated,
-}: {
-  adminDefault?: boolean;
-  onCreated: (recoveryKey: string) => void;
-}) {
+export default function Welcome({ onCreated }: { onCreated: (recoveryKey: string) => void }) {
   const [name, setName] = useState('');
   const [path, setPath] = useState('');
   const [pin, setPin] = useState('');
@@ -170,11 +164,6 @@ export default function Welcome({
       <div className="w-full max-w-5xl grid gap-6 md:grid-cols-2">
         <div className="p-5 bg-surface border border-border rounded-card">
         <h2 className="text-title-2 text-foreground mb-4">Create Vault</h2>
-        {adminDefault && (
-          <div className="mb-3 p-3 rounded-input border border-warning/40 bg-warning/10 text-warning text-sm">
-            Admin account is using the default password. Change it in Settings → Account.
-          </div>
-        )}
         <form onSubmit={handleCreate} className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="name">Vault Name</Label>

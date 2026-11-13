@@ -40,7 +40,7 @@ describe('phase6_token_rotates_after_lock_unlock', () => {
     // Layer 1 already passed: this test is about the vault session.
     vi.mocked(appStatus).mockResolvedValue({
       ok: true,
-      data: { logged_in: true, email: 'a@b.co', role: 'user', logged_in_since: 1, used_default_password: false },
+      data: { logged_in: true, email: 'a@b.co', role: 'user', logged_in_since: 1 },
     });
     // Model an existing vault whose path the UI remembers across lock/unlock.
     window.localStorage.setItem('veylora.vaultPath', '/test/vault');

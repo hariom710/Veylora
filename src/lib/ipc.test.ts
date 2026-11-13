@@ -72,7 +72,6 @@ describe('ipc layer', () => {
       email: 'a@b.co',
       role: 'user',
       logged_in_since: 1,
-      used_default_password: false,
     });
     const result = await appLogin('a@b.co', 'secret123');
     expect(mockInvoke).toHaveBeenCalledWith('app_login_cmd', {

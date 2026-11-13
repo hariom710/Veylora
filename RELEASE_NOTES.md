@@ -13,6 +13,10 @@
 - **Explorer icon cache**: the app broadcasts an icon-change notification on
   startup, so Windows re-reads the executable icon without a manual cache
   wipe.
+- **No default credentials**: the hardcoded first-run admin account and its
+  default password/PIN constants are gone from the app. A fresh install has
+  zero accounts — the first sign-up becomes the admin, later sign-ups are
+  regular users. (Existing installs keep their accounts unchanged.)
 - Docs/toolchain numbers refreshed (Rust 1.100, 169 Rust + 72 frontend
   tests).
 

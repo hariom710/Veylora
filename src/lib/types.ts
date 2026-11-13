@@ -28,7 +28,6 @@ export interface AppStatus {
   email: string | null;
   role: string | null;
   logged_in_since: number | null;
-  used_default_password: boolean;
 }
 
 export interface AppUser {

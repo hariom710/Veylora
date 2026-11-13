@@ -5,7 +5,7 @@
 .DESCRIPTION
   Wipes app state for a true first-run, launches the installed exe, and
   drives the UI over the Chrome DevTools Protocol:
-    login -> create vault -> recovery -> import -> image viewer ->
+    sign up + login -> create vault -> recovery -> import -> image viewer ->
     vault:// fetch -> lock -> PIN unlock -> dashboard counts.
   Exits 0 only when every assertion passes; 1 otherwise.
 
@@ -21,9 +21,10 @@ param(
   [string]$VaultPath = "$env:USERPROFILE\Documents\FinalTest",
   [string]$Pin = '1234',
   [string]$Password = 'testpass123',
-  # Seeded first-run admin account (see src-tauri/src/app_auth.rs).
-  [string]$AdminEmail = 'b1865741@gmail.com',
-  [string]$AdminPassword = 'Harry@12345',
+  # First-run account: no default credentials exist in the app, so the smoke
+  # signs up (first account becomes admin) and then signs in with it.
+  [string]$AccountEmail = 'smoke-admin@veylora.test',
+  [string]$AccountPassword = 'SmokePass123',
   [int]$Port = 9444,
   [string]$ShotDir = (Join-Path $env:TEMP 'veylora-smoke')
 )
@@ -90,14 +91,19 @@ function Capture([IntPtr]$h, [string]$name) {
 # JS single-quoted-string escaping for values embedded in Runtime.evaluate.
 function Js([string]$s) { return $s.Replace('\', '\\').Replace("'", "\'") }
 
-# --- True first-run: kill app, wipe localStorage, remove old test vault ---
+# --- True first-run: kill app, wipe accounts + localStorage, remove old test vault ---
 Get-Process veylora -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.Id -Force }
 Start-Sleep -Seconds 2
 $ls = "$env:LOCALAPPDATA\com.veylora.app\EBWebView\Default\Local Storage"
 if (Test-Path $ls) { Remove-Item $ls -Recurse -Force }
+# Layer-1 accounts: without this a rerun finds the smoke account already
+# created and signup fails with "Email already in use".
+$db = "$env:APPDATA\com.veylora.app\app.db"
+if (Test-Path $db) { Remove-Item $db -Force }
+Remove-Item "$db-wal","$db-shm" -Force -ErrorAction SilentlyContinue
 if (Test-Path $VaultPath) { Remove-Item $VaultPath -Recurse -Force }
-Write-Output "first-run: localStorage=$(-not (Test-Path $ls)) oldVaultGone=$(-not (Test-Path $VaultPath))"
-Check 'first-run wipe' ((-not (Test-Path $ls)) -and (-not (Test-Path $VaultPath)))
+Write-Output "first-run: accountsGone=$(-not (Test-Path $db)) localStorage=$(-not (Test-Path $ls)) oldVaultGone=$(-not (Test-Path $VaultPath))"
+Check 'first-run wipe' ((-not (Test-Path $db)) -and (-not (Test-Path $ls)) -and (-not (Test-Path $VaultPath)))
 if ($Port -lt 1 -or $Port -gt 65535) {
   Write-Output "INVALID CDP PORT: $Port (expected 1-65535)"
   exit 1
@@ -196,14 +202,22 @@ function Stage([string]$label) {
   return $t
 }
 
-# --- 1. Layer 1: login ---
+# --- 1. Layer 1: sign up (fresh install: first account = admin), then sign in ---
 $s0 = Stage 'S0-LOGIN'
-Fill 'email' $AdminEmail
-Fill 'password' $AdminPassword
+Write-Output "MODE: $(J-Eval '[(()=>{const b=[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Sign up");if(!b)return "NO BTN";b.click();return "clicked";})()]')"
+Start-Sleep -Milliseconds 500
+Fill 'signup-email' $AccountEmail
+Fill 'signup-password' $AccountPassword
+Fill 'signup-confirm' $AccountPassword
+Write-Output "SIGNUP: $(J-Eval '[(()=>{document.querySelector("form").requestSubmit();return "fired";})()]')"
+Start-Sleep -Seconds 4
+# Signup succeeds and flips the card back to Sign in (email stays filled).
+Fill 'email' $AccountEmail
+Fill 'password' $AccountPassword
 Write-Output "LOGIN: $(J-Eval '[(()=>{document.querySelector("form").requestSubmit();return "fired";})()]')"
 Start-Sleep -Seconds 4
 $s1 = Stage 'S1-WELCOME'
-Check 'login reaches Welcome' ($s1 -like '*Create Vault*')
+Check 'signup + login reaches Welcome' ($s1 -like '*Create Vault*')
 
 # --- 2. Create the test vault ---
 Fill 'name' $VaultName

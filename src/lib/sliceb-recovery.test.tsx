@@ -54,15 +54,13 @@ const LOGGED_OUT = {
   email: null,
   role: null,
   logged_in_since: null,
-  used_default_password: false,
 };
 
 const LOGGED_IN = {
   logged_in: true,
-  email: 'b1865741@gmail.com',
+  email: 'admin@example.com',
   role: 'admin',
   logged_in_since: 1762700000,
-  used_default_password: false,
 };
 
 const RECOVERY_KEY = 'ABCDEFGH234567ABCDEFGH234567ABCDEFGH234567ABCDEFGH234567ABCD';
@@ -109,7 +107,7 @@ describe('Slice B: create vault → recovery key → dashboard', () => {
 
     // Layer 1: log in first.
     await screen.findByText('Your Files. Your Privacy. Your Control.');
-    await user.type(screen.getByLabelText('Email'), 'b1865741@gmail.com');
+    await user.type(screen.getByLabelText('Email'), 'admin@example.com');
     await user.type(screen.getByLabelText('Password'), 'password123');
     await user.click(screen.getByRole('button', { name: /Sign in/i }));
 
@@ -145,7 +143,7 @@ describe('Slice B: create vault → recovery key → dashboard', () => {
   it('rejects mismatched passwords client-side without calling the backend', async () => {
     render(<App />);
     await screen.findByText('Your Files. Your Privacy. Your Control.');
-    await user.type(screen.getByLabelText('Email'), 'b1865741@gmail.com');
+    await user.type(screen.getByLabelText('Email'), 'admin@example.com');
     await user.type(screen.getByLabelText('Password'), 'password123');
     await user.click(screen.getByRole('button', { name: /Sign in/i }));
 
@@ -164,7 +162,7 @@ describe('Slice B: create vault → recovery key → dashboard', () => {
   it('rejects a PIN that is not 4-6 digits client-side', async () => {
     render(<App />);
     await screen.findByText('Your Files. Your Privacy. Your Control.');
-    await user.type(screen.getByLabelText('Email'), 'b1865741@gmail.com');
+    await user.type(screen.getByLabelText('Email'), 'admin@example.com');
     await user.type(screen.getByLabelText('Password'), 'password123');
     await user.click(screen.getByRole('button', { name: /Sign in/i }));
 

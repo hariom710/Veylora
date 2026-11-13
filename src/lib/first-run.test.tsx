@@ -29,7 +29,7 @@ describe('first run (no vault open)', () => {
     // Layer 1 already passed: this test is about the vault gate.
     vi.mocked(appStatus).mockResolvedValue({
       ok: true,
-      data: { logged_in: true, email: 'a@b.co', role: 'user', logged_in_since: 1, used_default_password: false },
+      data: { logged_in: true, email: 'a@b.co', role: 'user', logged_in_since: 1 },
     });
     vi.mocked(vaultStatus).mockResolvedValue({
       ok: true,

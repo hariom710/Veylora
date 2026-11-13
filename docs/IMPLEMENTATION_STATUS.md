@@ -197,9 +197,10 @@ Status: fixes applied (frontend assets + dialog plugin); smoke test in progress
   `%APPDATA%\com.veylora.app\app.db`, in-memory session), Layer 2 vault selection
   (Welcome screen), Layer 3 vault unlock (PIN/password/recovery). Logout ≠ lock,
   lock ≠ logout.
-- Admin account seeded on first start: `b1865741@gmail.com` / `Harry@12345`
-  (src-tauri/src/app_auth.rs ADMIN_EMAIL/ADMIN_DEFAULT_PASSWORD). The app flags the
-  default password so it can be changed from the Account screen.
+- Admin account: the seed was REMOVED in v1.0.1 — no default credentials ship
+  in the app anymore; the first sign-up on a fresh install becomes the admin
+  (later sign-ups are regular users). Previously a hardcoded default admin
+  existed with a default-password banner.
 - Routes: /login, /welcome (first-run create/open), gated app shell.
 - Tests: 7 tests in tests/phase9_app_auth.rs; frontend phase9-login.test.tsx,
   first-run.test.tsx.

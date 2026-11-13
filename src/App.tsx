@@ -35,7 +35,6 @@ const LOGGED_OUT: AppStatus = {
   email: null,
   role: null,
   logged_in_since: null,
-  used_default_password: false,
 };
 
 function storedVaultPath(): string | null {
@@ -222,7 +221,7 @@ function AppContentInner() {
 
   if (isLocked && !hasOpenVault) {
     return (
-      <Welcome adminDefault={app.used_default_password} onCreated={handleVaultCreated} />
+      <Welcome onCreated={handleVaultCreated} />
     );
   }
 
