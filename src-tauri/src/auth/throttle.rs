@@ -81,7 +81,9 @@ pub fn record_failure(db: &Db, vault_id: u64) {
            locked_until_unix = ?2 + CASE{case} ELSE 0 END,
            last_attempt_unix = ?2"
     );
-    let _ = db.conn().execute(&sql, rusqlite::params![vault_id as i64, now]);
+    let _ = db
+        .conn()
+        .execute(&sql, rusqlite::params![vault_id as i64, now]);
 }
 
 /// Clear attempts for a vault (called on successful unlock).

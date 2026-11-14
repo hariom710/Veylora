@@ -216,12 +216,14 @@ fn phase9_deleted_admin_row_invalidates_session() {
     let auth = AppAuth::with_db_path(db_path.clone());
     auth.signup("admin@example.com", "longenough")
         .expect("first signup (admin)");
-    auth.login("admin@example.com", "longenough").expect("login");
+    auth.login("admin@example.com", "longenough")
+        .expect("login");
     assert!(auth.status().logged_in);
 
     {
         let conn = rusqlite::Connection::open(&db_path).expect("open app.db");
-        conn.execute("DELETE FROM app_users", []).expect("delete rows");
+        conn.execute("DELETE FROM app_users", [])
+            .expect("delete rows");
     }
 
     let err = auth.list_users().expect_err("stale admin must be refused");
