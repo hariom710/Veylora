@@ -1,5 +1,17 @@
 # Veylora Release Notes
 
+## v1.0.2 (2026-11-14)
+
+- **Lock is now noticed everywhere**: the shell polls vault status every 5s
+  while unlocked, so an idle auto-lock or Win+L returns you to the vault
+  picker instead of leaving a stale unlocked shell on screen.
+- **Image and video viewers detect a mid-stream lock**: when the vault locks
+  while media is loading, they now show the unlock modal (matching the PDF
+  viewer) instead of a broken-image/black frame; genuine load failures show
+  a plain error, not a lock prompt.
+- **Docs**: `ARCHITECTURE.md` now documents the real 3-state session model
+  (closed / open+locked / open+unlocked) instead of a 2-state sketch.
+
 ## v1.0.1 (2026-11-13)
 
 - **Auto-update**: Settings → About → **Check for updates** now downloads a

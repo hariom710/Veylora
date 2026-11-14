@@ -50,24 +50,31 @@ SQLite runs in WAL mode with `synchronous=FULL`.
 
 ## Session Lifecycle
 
-```
-┌─────────┐    Unlock     ┌──────────┐    Auto-lock/Lock    ┌─────────┐
-│ Locked  │ ─────────────►│ Unlocked │ ───────────────────► │ Locked  │
-└─────────┘               └──────────┘                       └─────────┘
-     ▲                                              │
-     │                                              │
-     └──────────────────────────────────────────────┘
-                    MVK zeroized on lock
-```
+State is the pair `(session: Option<Session>, current_path: Option<String>)`
+in `SessionManager` (`auth/session.rs`). Three states are reachable; the
+fourth combination is an unreachable invariant maintained by `set_session`
+always pairing a session with a path.
 
-**Session states:**
-- **Locked**: No session active; MVK is not in memory.
-- **Unlocked**: Session active; MVK is in a `zeroize` buffer.
+| `session` | `current_path` | State | Frontend gate |
+|---|---|---|---|
+| `None` | `None` | **Closed** — no vault open (also the fresh-install state) | vault picker (Welcome) |
+| `None` | `Some` | **Open + locked** — vault chosen, MVK not in memory | Unlock keypad |
+| `Some` | `Some` | **Open + unlocked** — MVK in a `zeroize` buffer | app shell |
+| `Some` | `None` | unreachable | — |
 
-**Session transitions:**
-- `create`/`unlock`: `Locked` → `Unlocked` (MVK decrypted from `vault.meta` into a zeroizing buffer)
-- `lock`: `Unlocked` → `Locked` (MVK zeroized, session dropped)
-- `auto-lock`: `Unlocked` → `Locked` (after idle timeout, default 5 minutes)
+**Transitions:**
+- `vault_open`: Closed → Open+locked (`set_current_path`)
+- `create`/`unlock`: Open+locked → Open+unlocked (MVK decrypted from `vault.meta` into a zeroizing buffer; token issued/rotated)
+- `lock` (manual, idle auto-lock, or Win+L): Open+unlocked → Open+locked (MVK zeroized, session dropped, token invalidated)
+- `vault_delete`: any → Closed (path cleared)
+- **Idle auto-lock**: a `std::thread` checks every 30s against a timeout (default 300s, Settings → Security); reaching it calls `lock`.
+- **Win+L / RDP lock**: a WTS listener calls `lock` the instant the OS session locks. One-way by design: OS unlock never re-opens the vault.
+
+**Frontend mirror:** `isLocked × hasOpenVault × sessionToken` in `App.tsx`
+must track this pair. Because there is no lock *event*, the shell polls
+`vault_status` every 5s while unlocked and drops its session token when the
+backend reports locked; in-flight `vault://` URLs 403 as soon as the token
+is invalidated, which the viewers surface as the unlock modal.
 
 **Zeroization:** The MVK and all derived keys live in `zeroize` buffers and are wiped when the session is dropped (on lock, close, or auto-lock).
 

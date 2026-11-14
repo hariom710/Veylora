@@ -89,6 +89,10 @@ function AppContentInner() {
       if (!data.locked && data.vault_id != null) {
         const token = await vaultGetSessionToken();
         if (token.ok && token.data) setSessionToken(token.data);
+      } else {
+        // Backend locked (idle timer / Win+L): it invalidated the token, so
+        // drop ours too; the gate re-renders the vault picker.
+        setSessionToken(null);
       }
     }
   }
@@ -148,6 +152,17 @@ function AppContentInner() {
     return () => {
       events.forEach((e) => window.removeEventListener(e, report));
     };
+  }, [isLocked, pendingRecovery, app.logged_in]);
+
+  // The backend locks itself (idle timer, Win+L) with no event back to the
+  // UI, so poll while unlocked: the gate switches to the vault picker as
+  // soon as the lock lands.
+  useEffect(() => {
+    if (isLocked || pendingRecovery || !app.logged_in) return;
+    const id = window.setInterval(() => {
+      void checkStatus();
+    }, 5_000);
+    return () => window.clearInterval(id);
   }, [isLocked, pendingRecovery, app.logged_in]);
 
   // Keyboard shortcuts (main app only — gate screens have nothing to do).
