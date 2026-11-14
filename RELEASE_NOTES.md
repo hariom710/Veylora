@@ -17,6 +17,9 @@
   default password/PIN constants are gone from the app. A fresh install has
   zero accounts — the first sign-up becomes the admin, later sign-ups are
   regular users. (Existing installs keep their accounts unchanged.)
+- **Lock Vault returns to the vault picker**: locking now lands on the
+  Create / Open Existing Vault screen instead of the PIN keypad — reopen
+  the same vault (or pick a different one), then unlock it.
 - Docs/toolchain numbers refreshed (Rust 1.100, 169 Rust + 72 frontend
   tests).
 

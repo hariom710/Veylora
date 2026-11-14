@@ -42,8 +42,6 @@ describe('phase6_token_rotates_after_lock_unlock', () => {
       ok: true,
       data: { logged_in: true, email: 'a@b.co', role: 'user', logged_in_since: 1 },
     });
-    // Model an existing vault whose path the UI remembers across lock/unlock.
-    window.localStorage.setItem('veylora.vaultPath', '/test/vault');
     vi.mocked(vaultOpen).mockResolvedValue({ ok: true, data: { name: 'test', path: '/test/vault', vault_id: 1, recovery_key: '' } });
     vi.mocked(vaultStatus).mockResolvedValue({ ok: true, data: { locked: true, vault_id: null, file_count: 0, storage_used: 0, vault_open: true } });
     vi.mocked(fileRecent).mockResolvedValue({ ok: true, data: [] });
@@ -61,7 +59,7 @@ describe('phase6_token_rotates_after_lock_unlock', () => {
     vi.mocked(vaultUnlockPin).mockResolvedValue({ ok: true, data: { vault_id: 1, unlock_method: 'pin' } });
     vi.mocked(vaultGetSessionToken).mockResolvedValue({ ok: true, data: 'token_1' });
 
-    render(<App />);
+    const view = render(<App />);
 
     // Cold start shows Login until appStatus resolves; wait for the vault gate.
     await screen.findByLabelText(/PIN/i);
@@ -81,8 +79,17 @@ describe('phase6_token_rotates_after_lock_unlock', () => {
     vi.mocked(vaultLock).mockResolvedValue({ ok: true, data: undefined });
     await user.click(screen.getByRole('button', { name: /Lock Vault/i }));
 
-    // Should return to Unlock screen
-    expect(screen.getByText(/Unlock Vault/i)).toBeInTheDocument();
+    // Lock lands on the vault picker (Create / Open Existing Vault), not the
+    // PIN screen.
+    expect(await screen.findByText(/Open Existing Vault/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Unlock Vault/i)).not.toBeInTheDocument();
+
+    // Welcome's Open flow reloads the webview in the real app (the Rust
+    // session survives it); model that as a fresh mount so the UI is back on
+    // the Unlock screen for the second half of the cycle.
+    view.unmount();
+    render(<App />);
+    await screen.findByLabelText(/PIN/i);
 
     // Second unlock with different token
     vi.mocked(vaultUnlockPin).mockResolvedValue({ ok: true, data: { vault_id: 1, unlock_method: 'pin' } });

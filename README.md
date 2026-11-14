@@ -262,7 +262,7 @@ Notes:
 4. **Save the recovery key** — shown **exactly once**; confirm the checkbox to continue. Without it, a forgotten PIN/password pair means the vault is unrecoverable by design.
 5. **Dashboard** — stat cards show file count, storage used, and last backup. Import via **Import Files**, the **drag-and-drop zone**, or <kbd>Ctrl</kbd>+<kbd>O</kbd>.
 6. **Files page** — per-file `Open` / `Export` / `Rename` / `Delete`, folders, the move dialog, sort, search, batch select, and a right-click context menu.
-7. **View** — images, video and PDF open in-app over `vault://`; decrypted bytes never touch disk. Lock with <kbd>Ctrl</kbd>+<kbd>L</kbd> or **Lock Vault**, then unlock from the keypad (PIN / password / recovery tabs).
+7. **View** — images, video and PDF open in-app over `vault://`; decrypted bytes never touch disk. Lock with <kbd>Ctrl</kbd>+<kbd>L</kbd> or **Lock Vault** — you land on the vault picker; reopen the vault, then unlock from the keypad (PIN / password / recovery tabs).
 8. **Backup page** — **Create** a container, **Verify** it, **Restore** it, and review or clear the history.
 9. **Settings** — auto-lock timeout (1/5/15/30 min), change PIN, change master password, a **Check for updates** action (About tab, from v1.0.1), and a type-to-confirm **Danger Zone** to delete the vault.
 10. **Account** — avatar, user management for admins (create/delete users), and **Sign out** (clears Layer 1 only).

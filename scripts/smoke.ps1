@@ -263,11 +263,16 @@ Check 'vault:// fetch returns 200' ($fetch -like '*status=200*')
 $p0 = Get-Process veylora -ErrorAction SilentlyContinue
 if ($p0) { Capture $p0.MainWindowHandle "smoke-viewer" }
 
-# --- 6. Lock, then unlock with PIN ---
+# --- 6. Lock → vault picker, re-open the vault, then unlock with PIN ---
 Write-Output "LOCK: $(J-Eval '[(()=>{const b=[...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Lock Vault");if(!b)return "NO LOCK";b.click();return "clicked";})()]')"
 Start-Sleep -Seconds 3
 $s5 = Stage 'S5-LOCKED'
-Check 'lock shows unlock screen' ($s5 -like '*Unlock Vault*')
+Check 'lock shows vault picker (Create/Open)' ($s5 -like '*Create Vault*')
+Fill 'open-path' $VaultPath
+Write-Output "REOPEN: $(J-Eval '[(()=>{const f=document.querySelectorAll("form")[1];if(!f)return "NO FORM";f.requestSubmit();return "fired";})()]')"
+Start-Sleep -Seconds 5
+$s5b = Stage 'S5B-UNLOCK'
+Check 'open vault reaches unlock screen' ($s5b -like '*Unlock Vault*')
 Fill 'pin' $Pin
 Write-Output "UNLOCK: $(J-Eval '[(()=>{const i=document.getElementById("pin");if(!i)return "NO PIN";i.form.requestSubmit();return "fired";})()]')"
 Start-Sleep -Seconds 6

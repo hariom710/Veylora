@@ -18,7 +18,6 @@ import Account from './routes/account';
 import {
   appStatus,
   vaultStatus,
-  vaultOpen,
   vaultGetSessionToken,
   vaultLock,
   vaultActivity,
@@ -26,24 +25,12 @@ import {
 } from '@/lib/ipc';
 import { AppStatus } from '@/lib/types';
 
-// Last opened vault path. In-memory backend state (current_path) does not
-// survive restart or lock, so the UI re-opens it before unlock.
-const VAULT_PATH_KEY = 'veylora.vaultPath';
-
 const LOGGED_OUT: AppStatus = {
   logged_in: false,
   email: null,
   role: null,
   logged_in_since: null,
 };
-
-function storedVaultPath(): string | null {
-  try {
-    return window.localStorage.getItem(VAULT_PATH_KEY);
-  } catch {
-    return null;
-  }
-}
 
 function AppContent() {
   return (
@@ -89,8 +76,7 @@ function AppContentInner() {
 
     // Never auto-open a remembered vault on cold start: the flow is
     // Login → Welcome (Create/Open) → Unlock, so a fresh launch must land on
-    // Welcome. The stored path is opened explicitly by Welcome (Open) and by
-    // handleLock (after a lock within the same session).
+    // Welcome. The stored path is opened explicitly by Welcome (Open).
     await checkStatus();
   }
 
@@ -117,14 +103,9 @@ function AppContentInner() {
 
   async function handleLock() {
     await vaultLock();
-    // lock() clears the backend's current path; re-open so unlock works.
-    const path = storedVaultPath();
-    if (path) {
-      await vaultOpen(path);
-      setHasOpenVault(true);
-    } else {
-      setHasOpenVault(false);
-    }
+    // Lock lands on the vault picker (Create / Open Existing Vault), not the
+    // PIN screen: Welcome re-opens the stored path explicitly before unlock.
+    setHasOpenVault(false);
     setIsLocked(true);
     setSessionToken(null);
   }
