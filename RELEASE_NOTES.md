@@ -1,5 +1,28 @@
 # Veylora Release Notes
 
+## v1.0.3 (2026-11-14)
+
+Hardening pass over the app's implicit state machines (audit follow-up):
+
+- **Opening a vault can no longer pair the old key with a new path**: if a
+  session is somehow still live, it is dropped first (fail closed), a vault
+  whose three unlock methods are all missing is refused up front, and open now
+  runs the crash-recovery scan (reaps orphaned temp blobs, refuses a corrupt
+  `vault.db`) — that scan previously existed but never ran.
+- **Credential rotation keeps its bookkeeping**: changing the PIN or password
+  rewrites `vault.meta`, which renumbers the vault id hashed from it —
+  favorites and the unlock-lockout counter are now re-keyed with it, so
+  neither silently disappears after a rotation.
+- **Metadata insert and schema migrations are transactional**: a crash mid-way
+  can no longer leave an unreadable file row (wrong AAD binding) or a vault
+  that refuses to open (half-applied, non-replayable DDL).
+- **Failed-attempt counting is one atomic SQL statement** — no lost increments
+  when attempts race.
+- **Admin role is re-checked against the database** on every admin command:
+  a deleted account's session is dropped instead of keeping admin rights.
+- **File Manager**: the single-file context menu no longer opens in
+  multi-select mode (the batch selection would have gone stale behind it).
+
 ## v1.0.2 (2026-11-14)
 
 - **Lock is now noticed everywhere**: the shell polls vault status every 5s

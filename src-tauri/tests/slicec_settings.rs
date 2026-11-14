@@ -252,3 +252,60 @@ fn slicec_auto_lock_timeout_is_configurable() {
     assert_eq!(auto_lock::timeout_secs(), 0);
     auto_lock::set_timeout(300); // restore default for other tests
 }
+
+#[test]
+fn slicec_rotation_rekeys_favorites_and_throttle() {
+    // vault_id is a hash of vault.meta; rotation rewrites that file, so every
+    // row keyed on the id must move with it — otherwise favorites vanish and
+    // the lockout silently resets.
+    let session = Arc::new(SessionManager::new());
+    let root = tmp_dir("rekey");
+    create_vault(&root, &session);
+    let file_id = import_file(&root, "rekey.txt", &session);
+    files::file_favorite(file_id, true, session.clone()).expect("favorite");
+
+    let old_id = session.vault_id().expect("session unlocked");
+    let db_path = root.join("vault").join("vault.db");
+
+    // Arm the throttle under the current id.
+    {
+        let db = veylora::database::Db::open(&db_path).expect("db");
+        for _ in 0..5 {
+            veylora::auth::throttle::record_failure(&db, old_id);
+        }
+        assert!(
+            veylora::auth::throttle::check_locked(&db, old_id).is_some(),
+            "lockout armed"
+        );
+    }
+
+    commands::vault_change_pin("1234".to_string(), "5678".to_string(), session.clone())
+        .expect("rotate");
+
+    // The throttle row must have moved off the old id...
+    {
+        let db = veylora::database::Db::open(&db_path).expect("db");
+        assert!(
+            veylora::auth::throttle::check_locked(&db, old_id).is_none(),
+            "throttle row must move to the new vault_id"
+        );
+    }
+    // ...and the favorite must still be listed (queries use the new id).
+    let favs = files::file_favorites(session.clone()).expect("favorites");
+    assert_eq!(favs.len(), 1, "favorite must survive a PIN rotation");
+
+    // Unlock queries the NEW id: the lockout must still bite.
+    session.lock();
+    commands::vault_open(
+        root.join("vault").to_string_lossy().into_owned(),
+        session.clone(),
+    )
+    .expect("reopen");
+    let err = commands::vault_unlock_pin("5678".to_string(), session.clone()).unwrap_err();
+    assert!(
+        err.contains("locked out"),
+        "lockout must follow the rotation, got: {err}"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}

@@ -211,7 +211,15 @@ impl AppAuth {
             )
             .optional()
             .map_err(|e| e.to_string())?;
-        let stored = stored.ok_or_else(|| "Invalid password".to_string())?;
+        let stored = match stored {
+            Some(s) => s,
+            None => {
+                // Row deleted since login: a dangling session, not a bad
+                // password — drop it instead of blaming the credential.
+                self.logout();
+                return Err("Not logged in".to_string());
+            }
+        };
         if !verify_password(old_password, &stored) {
             return Err("Invalid password".to_string());
         }
@@ -295,10 +303,26 @@ impl AppAuth {
 
     fn require_admin(&self) -> Result<AppSession, String> {
         let session = self.require_session()?;
-        if session.role != "admin" {
-            return Err("Admin only".to_string());
+        // Role is a login-time snapshot: re-read the row so a user deleted
+        // since login can't keep acting as admin.
+        let conn = self.open()?;
+        let role: Option<String> = conn
+            .query_row(
+                "SELECT role FROM app_users WHERE email = ?1 COLLATE NOCASE",
+                rusqlite::params![session.email],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        match role.as_deref() {
+            Some("admin") => Ok(session),
+            Some(_) => Err("Admin only".to_string()),
+            None => {
+                // Row is gone: the session is dangling, drop it.
+                self.logout();
+                Err("Not logged in".to_string())
+            }
         }
-        Ok(session)
     }
 }
 

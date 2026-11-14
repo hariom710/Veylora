@@ -133,6 +133,22 @@ pub fn vault_open(path: String, session: Arc<SessionManager>) -> Result<VaultInf
     let meta: VaultMeta =
         serde_json::from_str(&meta_str).map_err(|_| "vault corrupted".to_string())?;
 
+    // A vault with no unlock path at all can never be opened; say so instead
+    // of letting every attempt fail as a wrong credential.
+    if meta.pin.is_none() && meta.password.is_none() && meta.recovery.is_none() {
+        return Err("vault has no unlock method".to_string());
+    }
+
+    // Crash recovery: reap orphaned tmp blobs and refuse a corrupt DB before
+    // this path becomes the active one.
+    crate::storage::startup_scan(std::path::Path::new(&path)).map_err(|e| e.to_string())?;
+
+    // Fail closed: a live session holds the OLD vault's MVK. Pairing it with
+    // this new path would make every read use the wrong key.
+    if !session.is_locked() {
+        session.lock();
+    }
+
     let vault_id = vault_id_from_meta(&meta);
 
     // Store the current path (no session yet â€” locked state)
@@ -363,6 +379,28 @@ fn vault_id_from_meta(meta: &VaultMeta) -> u64 {
     let mut hasher = DefaultHasher::new();
     meta.hash(&mut hasher);
     hasher.finish()
+}
+
+/// Move bookkeeping rows that key on `vault_id` after a credential rotation
+/// rewrites vault.meta (the id is a hash of that file, so it changes): without
+/// this, favorites and the throttle row are silently orphaned on rotation.
+fn rekey_vault_rows(path: &str, old_id: u64, new_id: u64) -> Result<(), String> {
+    if old_id == new_id {
+        return Ok(());
+    }
+    let db = crate::database::Db::open(&std::path::Path::new(path).join("vault.db"))
+        .map_err(|e| e.to_string())?;
+    for sql in [
+        "UPDATE favorites SET vault_id = ?2 WHERE vault_id = ?1",
+        "UPDATE auth_attempts SET vault_id = ?2 WHERE vault_id = ?1",
+        "UPDATE encrypted_files SET vault_id = ?2 WHERE vault_id = ?1",
+        "UPDATE folders SET vault_id = ?2 WHERE vault_id = ?1",
+    ] {
+        db.conn()
+            .execute(sql, rusqlite::params![old_id as i64, new_id as i64])
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 // ============================================================================
@@ -603,10 +641,12 @@ pub fn vault_change_pin(
 
     with_mvk(&session, |mvk| -> Result<(), String> {
         let (mut meta, vdir, _) = read_meta(&path)?;
+        let old_id = vault_id_from_meta(&meta);
         let mvk_obj = crate::crypto::mvk::Mvk::from_array(*mvk);
         meta.add_pin_entry(new_pin.as_bytes(), &mvk_obj)
             .map_err(|e| e.to_string())?;
-        write_meta(&vdir, &meta)
+        write_meta(&vdir, &meta)?;
+        rekey_vault_rows(&path, old_id, vault_id_from_meta(&meta))
     })?
 }
 
@@ -633,10 +673,12 @@ pub fn vault_change_password(
 
     with_mvk(&session, |mvk| -> Result<(), String> {
         let (mut meta, vdir, _) = read_meta(&path)?;
+        let old_id = vault_id_from_meta(&meta);
         let mvk_obj = crate::crypto::mvk::Mvk::from_array(*mvk);
         meta.add_password_entry(new_password.as_bytes(), &mvk_obj)
             .map_err(|e| e.to_string())?;
-        write_meta(&vdir, &meta)
+        write_meta(&vdir, &meta)?;
+        rekey_vault_rows(&path, old_id, vault_id_from_meta(&meta))
     })?
 }
 

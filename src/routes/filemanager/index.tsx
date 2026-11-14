@@ -491,6 +491,9 @@ export default function FileManager({ token, onLock }: FileManagerProps) {
                   onDoubleClick={() => openFile(file)}
                   onContextMenu={(e) => {
                     e.preventDefault();
+                    // Batch mode owns the files: the single-file menu would
+                    // act on one item while the checked set stays stale.
+                    if (selectMode) return;
                     setMenu({ x: e.clientX, y: e.clientY, file });
                   }}
                   data-testid={`file-row-${file.id}`}

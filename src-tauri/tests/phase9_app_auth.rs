@@ -207,3 +207,26 @@ fn phase9_non_admin_cannot_administer() {
 
     let _ = std::fs::remove_dir_all(tmp_db("user-role").parent().unwrap());
 }
+
+#[test]
+fn phase9_deleted_admin_row_invalidates_session() {
+    // Role is a login-time snapshot: deleting the row behind the session's
+    // back must not leave a stale admin running admin commands.
+    let db_path = tmp_db("dangling-admin");
+    let auth = AppAuth::with_db_path(db_path.clone());
+    auth.signup("admin@example.com", "longenough")
+        .expect("first signup (admin)");
+    auth.login("admin@example.com", "longenough").expect("login");
+    assert!(auth.status().logged_in);
+
+    {
+        let conn = rusqlite::Connection::open(&db_path).expect("open app.db");
+        conn.execute("DELETE FROM app_users", []).expect("delete rows");
+    }
+
+    let err = auth.list_users().expect_err("stale admin must be refused");
+    assert_eq!(err, "Not logged in");
+    assert!(!auth.status().logged_in, "dangling session must be dropped");
+
+    let _ = std::fs::remove_dir_all(db_path.parent().unwrap());
+}

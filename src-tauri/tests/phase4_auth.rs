@@ -517,3 +517,131 @@ fn phase4_commands_lock_reopen_unlock_roundtrip() {
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+#[test]
+fn phase4_vault_open_while_unlocked_drops_stale_session() {
+    // vault_open used to overwrite current_path without touching a live
+    // session: old MVK + new path = every read under the wrong key.
+    let tmp = setup_vault_dir();
+    let path = tmp.to_str().unwrap().to_string();
+    let manager = std::sync::Arc::new(SessionManager::new());
+
+    veylora::commands::vault_create(
+        "t".into(),
+        path.clone(),
+        "1234".into(),
+        "pw123456".into(),
+        manager.clone(),
+    )
+    .expect("create");
+    assert!(!manager.is_locked(), "create leaves the vault unlocked");
+
+    veylora::commands::vault_open(path.clone(), manager.clone()).expect("open");
+    assert!(manager.is_locked(), "open must drop the live session first");
+
+    // The path is set, so unlock still works after the fail-closed drop.
+    veylora::commands::vault_unlock_pin("1234".into(), manager.clone()).expect("unlock");
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn phase4_vault_open_runs_crash_scan() {
+    let tmp = setup_vault_dir();
+    let path = tmp.to_str().unwrap().to_string();
+    let manager = std::sync::Arc::new(SessionManager::new());
+
+    veylora::commands::vault_create(
+        "t".into(),
+        path.clone(),
+        "1234".into(),
+        "pw123456".into(),
+        manager.clone(),
+    )
+    .expect("create");
+    veylora::commands::vault_lock(manager.clone()).expect("lock");
+
+    // An orphaned temp blob must be reaped by the open-path scan.
+    let orphan = tmp.join("blobs").join(".veylora-tmp-orphan");
+    std::fs::write(&orphan, b"partial write").expect("plant orphan");
+    veylora::commands::vault_open(path.clone(), manager.clone()).expect("open");
+    assert!(!orphan.exists(), "orphan tmp blob must be removed on open");
+
+    // A corrupt DB must refuse to open, and must not set the path.
+    veylora::commands::vault_lock(manager.clone()).expect("lock");
+    std::fs::write(tmp.join("vault.db"), b"this is not sqlite").expect("corrupt db");
+    veylora::commands::vault_open(path.clone(), manager.clone())
+        .expect_err("corrupt DB must refuse to open");
+    assert!(
+        manager.current_path().is_none(),
+        "failed open must not activate the path"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn phase4_vault_open_rejects_vault_with_no_unlock_method() {
+    let tmp = setup_vault_dir();
+    let vdir = VaultDir::new(tmp.clone());
+    vdir.create_layout().expect("layout");
+    std::fs::write(
+        &vdir.meta_path,
+        r#"{"version":1,"pin":null,"password":null,"recovery":null}"#,
+    )
+    .expect("all-null meta");
+
+    let manager = std::sync::Arc::new(SessionManager::new());
+    let err = veylora::commands::vault_open(tmp.to_string_lossy().into_owned(), manager.clone())
+        .expect_err("vault with no unlock path must be refused");
+    assert!(err.contains("no unlock method"), "got: {err}");
+    assert!(manager.current_path().is_none(), "path must not be set");
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn phase4_record_failure_tiers_match_policy() {
+    // record_failure now computes the tier in SQL (one atomic statement);
+    // this pins that SQL to the documented THRESHOLDS policy.
+    let tmp = setup_vault_dir();
+    let (db, _mvk, _rk) = create_test_vault(&tmp);
+    const VAULT: u64 = 42;
+
+    for _ in 0..4 {
+        throttle::record_failure(&db, VAULT);
+    }
+    assert_eq!(throttle::failed_count(&db, VAULT), 4);
+    assert!(
+        throttle::check_locked(&db, VAULT).is_none(),
+        "no lockout below 5 failures"
+    );
+
+    for (at_count, secs) in [(5u64, 30i64), (10, 300), (15, 3600), (20, 86400)] {
+        while throttle::failed_count(&db, VAULT) < at_count - 1 {
+            throttle::record_failure(&db, VAULT);
+        }
+        throttle::record_failure(&db, VAULT);
+        assert_eq!(throttle::failed_count(&db, VAULT), at_count);
+
+        let locked_until: i64 = db
+            .conn()
+            .query_row(
+                "SELECT locked_until_unix FROM auth_attempts WHERE vault_id = 42",
+                [],
+                |r| r.get(0),
+            )
+            .expect("row");
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let remaining = locked_until - now;
+        assert!(
+            (secs - 2..=secs).contains(&remaining),
+            "count {at_count}: expected ~{secs}s lockout, got {remaining}s"
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}

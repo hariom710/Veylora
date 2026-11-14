@@ -62,40 +62,26 @@ pub fn record_failure(db: &Db, vault_id: u64) {
         .unwrap_or_default()
         .as_secs() as i64;
 
-    // Get current count
-    let current: Option<i64> = db
-        .conn()
-        .query_row(
-            "SELECT failed_count FROM auth_attempts WHERE vault_id = ?1",
-            rusqlite::params![vault_id as i64],
-            |row| row.get::<_, i64>(0),
-        )
-        .optional()
-        .ok()
-        .flatten();
-
-    let new_count = current.map_or(1, |c| c + 1);
-    // Highest matching tier wins (5→30s, 10→5min, 15→1h, 20+→24h).
-    // Below the first threshold: record the attempt, lock nothing —
-    // locked_until = now, which check_locked treats as already expired.
-    let lockout_seconds = THRESHOLDS
-        .iter()
-        .rev()
-        .find(|(threshold, _)| new_count >= (*threshold as i64))
-        .map(|(_, secs)| *secs)
-        .unwrap_or(0);
-
-    let locked_until = now + lockout_seconds;
-
-    let _ = db.conn().execute(
+    // One statement: the increment and the lockout derived from it must land
+    // together — a read-modify-write across two statements loses increments
+    // when two attempts race. The CASE mirrors THRESHOLDS (parity tested).
+    // Below the first threshold the lockout is 0: locked_until = now, which
+    // check_locked treats as already expired.
+    let mut case = String::new();
+    for (threshold, secs) in THRESHOLDS.iter().rev() {
+        case.push_str(&format!(
+            " WHEN auth_attempts.failed_count + 1 >= {threshold} THEN {secs}"
+        ));
+    }
+    let sql = format!(
         "INSERT INTO auth_attempts (vault_id, failed_count, locked_until_unix, last_attempt_unix)
-         VALUES (?1, ?2, ?3, ?4)
+         VALUES (?1, 1, ?2, ?2)
          ON CONFLICT(vault_id) DO UPDATE SET
-           failed_count = ?2,
-           locked_until_unix = ?3,
-           last_attempt_unix = ?4",
-        rusqlite::params![vault_id as i64, new_count, locked_until, now],
+           failed_count = auth_attempts.failed_count + 1,
+           locked_until_unix = ?2 + CASE{case} ELSE 0 END,
+           last_attempt_unix = ?2"
     );
+    let _ = db.conn().execute(&sql, rusqlite::params![vault_id as i64, now]);
 }
 
 /// Clear attempts for a vault (called on successful unlock).

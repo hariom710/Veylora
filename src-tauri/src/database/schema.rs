@@ -99,11 +99,16 @@ pub fn apply_migrations(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
             continue;
         }
 
+        // DDL and the version row commit together: a crash between them must
+        // not leave applied DDL marked pending — MIGRATION_V3's ALTER TABLE
+        // is not idempotent, so re-running it would brick the vault.
+        let tx = conn.unchecked_transaction()?;
         conn.execute_batch(sql)?;
-        conn.execute(
+        tx.execute(
             "INSERT INTO schema_migrations (version) VALUES (?1)",
             rusqlite::params![version],
         )?;
+        tx.commit()?;
     }
 
     Ok(())

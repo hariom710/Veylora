@@ -76,72 +76,87 @@ pub fn insert_file(
     )
     .map_err(|e| DbError::Sql(e.to_string()))?;
 
-    db.conn
-        .execute(
-            "INSERT INTO encrypted_files (vault_id, file_id, filename_nonce, filename_ciphertext,
+    // One transaction: a crash between INSERT and UPDATE would leave a row
+    // whose ciphertext is bound to row_id=0 — permanently undecryptable.
+    db.conn()
+        .execute_batch("BEGIN IMMEDIATE")
+        .map_err(DbError::from)?;
+
+    let staged = (|| -> Result<i64, DbError> {
+        db.conn
+            .execute(
+                "INSERT INTO encrypted_files (vault_id, file_id, filename_nonce, filename_ciphertext,
             folder_id, encrypted_size, encryption_version,
             created_at_nonce, created_at_ciphertext, modified_at_nonce, modified_at_ciphertext)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-            rusqlite::params![
-                vault_id as i64,
-                file_id,
-                fn_nonce,
-                fn_cipher,
-                folder_id.map(|v| v as i64),
-                encrypted_size as i64,
-                ENCRYPTION_VERSION,
-                ca_nonce,
-                ca_cipher,
-                ma_nonce,
-                ma_cipher,
-            ],
+                rusqlite::params![
+                    vault_id as i64,
+                    file_id,
+                    fn_nonce,
+                    fn_cipher,
+                    folder_id.map(|v| v as i64),
+                    encrypted_size as i64,
+                    ENCRYPTION_VERSION,
+                    ca_nonce,
+                    ca_cipher,
+                    ma_nonce,
+                    ma_cipher,
+                ],
+            )?;
+
+        // Get the new row id and re-encrypt with correct row_id in AAD.
+        let id: i64 = db
+            .conn
+            .query_row("SELECT last_insert_rowid()", [], |row| row.get(0))?;
+
+        // Re-encrypt with correct row_id for AAD binding
+        let (fn_nonce, fn_cipher) = encrypt_meta(
+            metadata_key,
+            TABLE,
+            id as u64,
+            "filename",
+            filename.as_bytes(),
         )
-        .map_err(DbError::from)?;
+        .map_err(|e| DbError::Sql(e.to_string()))?;
+        let (ca_nonce, ca_cipher) = encrypt_meta(
+            metadata_key,
+            TABLE,
+            id as u64,
+            "created_at",
+            now.to_string().as_bytes(),
+        )
+        .map_err(|e| DbError::Sql(e.to_string()))?;
+        let (ma_nonce, ma_cipher) = encrypt_meta(
+            metadata_key,
+            TABLE,
+            id as u64,
+            "modified_at",
+            now.to_string().as_bytes(),
+        )
+        .map_err(|e| DbError::Sql(e.to_string()))?;
 
-    // Get the new row id and re-encrypt with correct row_id in AAD.
-    let id: i64 = db
-        .conn
-        .query_row("SELECT last_insert_rowid()", [], |row| row.get(0))
-        .map_err(DbError::from)?;
-
-    // Re-encrypt with correct row_id for AAD binding
-    let (fn_nonce, fn_cipher) = encrypt_meta(
-        metadata_key,
-        TABLE,
-        id as u64,
-        "filename",
-        filename.as_bytes(),
-    )
-    .map_err(|e| DbError::Sql(e.to_string()))?;
-    let (ca_nonce, ca_cipher) = encrypt_meta(
-        metadata_key,
-        TABLE,
-        id as u64,
-        "created_at",
-        now.to_string().as_bytes(),
-    )
-    .map_err(|e| DbError::Sql(e.to_string()))?;
-    let (ma_nonce, ma_cipher) = encrypt_meta(
-        metadata_key,
-        TABLE,
-        id as u64,
-        "modified_at",
-        now.to_string().as_bytes(),
-    )
-    .map_err(|e| DbError::Sql(e.to_string()))?;
-
-    db.conn
-        .execute(
+        db.conn.execute(
             "UPDATE encrypted_files
          SET filename_nonce = ?2, filename_ciphertext = ?3,
              created_at_nonce = ?4, created_at_ciphertext = ?5,
              modified_at_nonce = ?6, modified_at_ciphertext = ?7
          WHERE id = ?1",
             rusqlite::params![id, fn_nonce, fn_cipher, ca_nonce, ca_cipher, ma_nonce, ma_cipher,],
-        )
-        .map_err(DbError::from)?;
+        )?;
 
-    Ok(id as u64)
+        Ok(id)
+    })();
+
+    match staged {
+        Ok(id) => {
+            db.conn().execute_batch("COMMIT").map_err(DbError::from)?;
+            Ok(id as u64)
+        }
+        Err(e) => {
+            let _ = db.conn().execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
 }
 
 /// Get a file record by id, decrypting metadata fields.
