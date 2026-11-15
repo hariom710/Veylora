@@ -37,14 +37,15 @@ pub enum StreamError {
 /// Parsed components of a vault:// URL.
 #[derive(Debug, Clone)]
 pub struct StreamRequest {
-    pub file_id: [u8; 32],
+    /// 16-byte blob id — the same ids file_import mints (32 hex chars).
+    pub file_id: [u8; 16],
     pub token: String,
     pub range_start: u64,
     pub range_end: Option<u64>,
     pub is_head: bool,
 }
 
-/// hex-encode a [u8; 32] into 64 hex chars.
-pub fn hex_encode(bytes: &[u8; 32]) -> String {
+/// hex-encode bytes into lowercase hex (2 chars per byte).
+pub fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }

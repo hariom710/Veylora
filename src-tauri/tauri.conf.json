@@ -1,6 +1,6 @@
 {
   "productName": "Veylora",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "identifier": "com.veylora.app",
   "build": {
     "frontendDist": "../dist",

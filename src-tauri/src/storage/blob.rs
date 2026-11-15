@@ -10,7 +10,7 @@
 //!   4. `fsync_dir` the parent directory
 
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::path::Path;
 
 use crate::storage::format::{self, FileKey, FormatError};
@@ -111,6 +111,51 @@ pub fn read_blob(
 
     let data = fs::read(&path).map_err(BlobError::Io)?;
     format::reader::read_range(&data, start, end, file_key).map_err(BlobError::Format)
+}
+
+/// Store already-encrypted format-v1 blob bytes verbatim (backup restore's
+/// container holds final blob bytes; passing them through write_blob would
+/// encrypt a second time and corrupt the file). Same atomic pattern as
+/// write_blob: temp -> fsync -> rename -> fsync dir. Returns the stored size.
+pub fn store_blob_raw(
+    vault_root: &Path,
+    file_id: &[u8; 16],
+    data: &[u8],
+) -> Result<u64, BlobError> {
+    let vdir = VaultDir::new(vault_root.to_path_buf());
+    vdir.ensure_dirs()?;
+
+    let final_path = vdir.blob_path(file_id);
+
+    let mut tmp_path = None;
+    for _attempt in 0..3 {
+        let suffix = random_hex(16);
+        let path = vdir.tmp_blob_path(&suffix);
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(mut f) => {
+                f.write_all(data).map_err(BlobError::Io)?;
+                f.sync_all().map_err(BlobError::Io)?;
+                tmp_path = Some(path);
+                break;
+            }
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(BlobError::Io(e)),
+        }
+    }
+    let tmp_path = tmp_path.ok_or_else(|| {
+        BlobError::Io(io::Error::other(
+            "failed to allocate temp path after 3 retries",
+        ))
+    })?;
+
+    fs::rename(&tmp_path, &final_path).map_err(BlobError::Io)?;
+    fsync_dir(&vdir.blobs_dir).map_err(BlobError::Io)?;
+
+    Ok(data.len() as u64)
 }
 
 /// Delete a blob file.

@@ -1,5 +1,7 @@
 use crate::auth::session::SessionManager;
+use crate::crypto::mvk::Mvk;
 use crate::database::Db;
+use crate::storage::format::{read_header, read_range, FileKey};
 use crate::storage::vault_dir::VaultDir;
 use crate::streaming::{hex_encode, parse_url, StreamError, StreamRequest};
 use crate::vault::VaultMeta;
@@ -45,57 +47,69 @@ pub fn handle_request(
     let _meta: VaultMeta =
         serde_json::from_str(&meta_str).map_err(|_| StreamError::FileNotFound)?;
 
-    // 4. Find the file record by file_id (hex-encoded)
+    // 4. Row-existence gate: never serve an orphan blob (a crash between
+    // write_blob and insert_file can leave one behind).
     let file_id_hex = hex_encode(&req.file_id);
-    let (_id, _vault_id, _file_id, encrypted_size, _encryption_version): (
-        u64,
-        u64,
-        String,
-        u64,
-        u32,
-    ) = db
-        .conn()
+    db.conn()
         .query_row(
-            "SELECT id, vault_id, file_id, encrypted_size, encryption_version
-             FROM encrypted_files WHERE file_id = ?1",
+            "SELECT id FROM encrypted_files WHERE file_id = ?1",
             rusqlite::params![file_id_hex],
-            |row| {
-                Ok((
-                    row.get::<_, i64>("id")? as u64,
-                    row.get::<_, i64>("vault_id")? as u64,
-                    row.get::<_, String>("file_id")?,
-                    row.get::<_, i64>("encrypted_size")? as u64,
-                    row.get::<_, u32>("encryption_version")?,
-                ))
-            },
+            |row| row.get::<_, i64>(0),
         )
         .optional()
         .map_err(|e| StreamError::Db(e.to_string()))?
         .ok_or(StreamError::FileNotFound)?;
 
-    // 5. Get total length from the file record
-    let total_length = encrypted_size;
+    // 5. Load the encrypted blob and derive its file key. Key material stays
+    // inside the closure (FileKey zeroizes on drop).
+    let (blob, file_key) = manager
+        .with_mvk(|mvk| -> Result<_, StreamError> {
+            let file_key = FileKey::derive(&Mvk::from_array(*mvk), &req.file_id)
+                .map_err(|e| StreamError::Db(e.to_string()))?;
+            let blob = std::fs::read(dir.blob_path(&req.file_id))
+                .map_err(|_| StreamError::FileNotFound)?;
+            Ok((blob, file_key))
+        })
+        .map_err(|_| StreamError::VaultLocked)??;
 
-    // 6. Map the byte range to chunk indices
+    // 6. Plaintext bounds come from the format header — the DB's
+    // encrypted_size counts chunk overhead and is not a plaintext length.
+    let (header, _) = read_header(&blob, &file_key).map_err(|_| StreamError::AuthFailed)?;
+    let total_length = header.total_length;
+    if total_length == 0 {
+        return Ok(Vec::new());
+    }
+    if req.range_start >= total_length {
+        return Err(StreamError::RangeOutOfBounds);
+    }
+
+    // 7. Clamp the requested range (inclusive) to the file.
+    let range_start = req.range_start;
+    let range_end = req
+        .range_end
+        .unwrap_or(total_length - 1)
+        .min(total_length - 1);
+
+    // 8. Map the byte range to chunk indices
     const CHUNK_SIZE: u64 = 65536;
-    let chunk_index_start = req.range_start / CHUNK_SIZE;
-    let chunk_index_end = if let Some(end) = req.range_end {
-        let clamped_end = end.min(total_length.saturating_sub(1));
-        clamped_end / CHUNK_SIZE
-    } else {
-        total_length.saturating_sub(1) / CHUNK_SIZE
-    };
+    let chunk_index_start = range_start / CHUNK_SIZE;
+    let chunk_index_end = range_end / CHUNK_SIZE;
 
-    // 7. Decrypt each chunk in range
+    // 9. Decrypt each chunk in range. read_range authenticates every chunk
+    // it touches; any failure aborts with AuthFailed (no unauthenticated
+    // bytes are ever returned).
     let mut plaintext = Vec::new();
 
     for chunk_index in chunk_index_start..=chunk_index_end {
-        // Check lock before each chunk ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â mid-stream lock aborts.
+        // Check lock before each chunk — mid-stream lock aborts.
         if manager.is_locked() {
             return Err(StreamError::MidStreamLock);
         }
 
-        let chunk_data = decrypt_chunk(db, dir, &req.file_id, chunk_index)?;
+        let chunk_start = chunk_index * CHUNK_SIZE;
+        let chunk_end = (chunk_start + CHUNK_SIZE).min(total_length);
+        let chunk_data = read_range(&blob, chunk_start, chunk_end, &file_key)
+            .map_err(|_| StreamError::AuthFailed)?;
 
         // Fire per-chunk hook (used in tests to simulate mid-stream lock)
         if let Some(hook) = on_chunk {
@@ -103,56 +117,22 @@ pub fn handle_request(
         }
 
         let chunk_offset_start = if chunk_index == chunk_index_start {
-            req.range_start % CHUNK_SIZE
+            (range_start % CHUNK_SIZE) as usize
         } else {
             0
-        } as usize;
+        };
         let chunk_offset_end = if chunk_index == chunk_index_end {
-            (req.range_end.unwrap_or(total_length.saturating_sub(1)) % CHUNK_SIZE + 1) as usize
+            (range_end % CHUNK_SIZE + 1) as usize
         } else {
             chunk_data.len()
         };
 
-        let remaining_in_request = (req.range_end.unwrap_or(total_length.saturating_sub(1))
-            - req.range_start
-            + 1) as usize;
-        if plaintext.len() >= remaining_in_request {
-            break;
-        }
-        let max_allowed = remaining_in_request.saturating_sub(plaintext.len());
-        let to_append = &chunk_data[chunk_offset_start..chunk_offset_end.min(chunk_data.len())];
-        let bytes_to_add = to_append
-            .iter()
-            .take(max_allowed)
-            .cloned()
-            .collect::<Vec<_>>();
-        plaintext.extend(bytes_to_add);
-
-        if plaintext.len() >= remaining_in_request {
-            break;
-        }
+        // The clamped range maps exactly onto these slices: they tile
+        // [range_start, range_end] with no gap or overlap.
+        plaintext.extend_from_slice(&chunk_data[chunk_offset_start..chunk_offset_end]);
     }
 
     Ok(plaintext)
-}
-
-/// Decrypt a single chunk using the format reader.
-/// Aborts (returns AuthFailed) if authentication fails.
-fn decrypt_chunk(
-    _db: &Db,
-    _dir: &VaultDir,
-    _file_id: &[u8; 32],
-    chunk_index: u64,
-) -> Result<Vec<u8>, StreamError> {
-    // For v1 testing, return deterministic dummy chunk data.
-    // Real per-chunk AEAD decryption is handled by storage::format::reader
-    // (already tested in Phase 2). The streaming handler orchestrates the
-    // request flow: token check, lock check, range mapping, chunk iteration.
-    let mut data = Vec::with_capacity(65536);
-    for i in 0..65536 {
-        data.push(((chunk_index * 65536 + i) % 256) as u8);
-    }
-    Ok(data)
 }
 
 /// Handle a streaming request end-to-end.

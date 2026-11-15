@@ -3,7 +3,7 @@ use crate::streaming::{StreamError, StreamRequest};
 /// Parse a vault:// URL into a StreamRequest.
 ///
 /// Expected shape: vault://file/<file_id_hex>?token=<hex>&range=<start>-<end>
-///   - file_id_hex: exactly 64 hex characters (32 bytes)
+///   - file_id_hex: exactly 32 hex characters (16 bytes, what file_import mints)
 ///   - token: any hex string (validated against SessionManager)
 ///   - range: optional. If absent, serve full file.
 ///   - start/inclusive, end/inclusive byte offsets into PLAINTEXT.
@@ -38,16 +38,16 @@ pub fn parse_url(url: &str) -> Result<StreamRequest, StreamError> {
     }
 
     let file_id_hex = path_parts[1];
-    if file_id_hex.len() != 64 {
+    if file_id_hex.len() != 32 {
         return Err(StreamError::UrlParse(format!(
-            "file_id_hex must be 64 hex chars (32 bytes), got {}: {}",
+            "file_id_hex must be 32 hex chars (16 bytes), got {}: {}",
             file_id_hex.len(),
             file_id_hex
         )));
     }
 
-    // Parse file_id into [u8; 32]
-    let file_id = parse_hex_32(file_id_hex).map_err(|_| {
+    // Parse file_id into [u8; 16]
+    let file_id = parse_hex_16(file_id_hex).map_err(|_| {
         StreamError::UrlParse(format!(
             "file_id_hex must be valid hex, got: {}",
             file_id_hex
@@ -127,15 +127,15 @@ pub fn parse_url(url: &str) -> Result<StreamRequest, StreamError> {
     })
 }
 
-/// Parse exactly 64 hex characters into [u8; 32].
-fn parse_hex_32(s: &str) -> Result<[u8; 32], StreamError> {
-    if s.len() != 64 {
+/// Parse exactly 32 hex characters into [u8; 16].
+fn parse_hex_16(s: &str) -> Result<[u8; 16], StreamError> {
+    if s.len() != 32 {
         return Err(StreamError::UrlParse(format!(
-            "file_id_hex must be 64 hex chars (32 bytes), got {}",
+            "file_id_hex must be 32 hex chars (16 bytes), got {}",
             s.len()
         )));
     }
-    let mut b = [0u8; 32];
+    let mut b = [0u8; 16];
     for (i, byte) in b.iter_mut().enumerate() {
         let high = hex_char_to_nibble(s.chars().nth(2 * i).unwrap_or('0'))?;
         let low = hex_char_to_nibble(s.chars().nth(2 * i + 1).unwrap_or('0'))?;

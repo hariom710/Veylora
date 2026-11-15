@@ -81,6 +81,19 @@ fn add_file_to_vault(
     plaintext: &[u8],
     filename: &str,
 ) -> String {
+    add_file_in_folder(db, mvk, vdir, plaintext, filename, None)
+}
+
+/// Same as add_file_to_vault but places the row in `folder_id` — used to
+/// prove backups do not skip foldered files.
+fn add_file_in_folder(
+    db: &Db,
+    mvk: &Mvk,
+    vdir: &VaultDir,
+    plaintext: &[u8],
+    filename: &str,
+    folder_id: Option<u64>,
+) -> String {
     let metadata_key =
         derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY).expect("metadata key derivation failed");
 
@@ -94,7 +107,7 @@ fn add_file_to_vault(
         1,
         &file_id_hex,
         filename,
-        None,
+        folder_id,
         plaintext.len() as u64,
     )
     .expect("insert file");
@@ -271,6 +284,17 @@ fn phase7_backup_read_via_protocol() {
     let blob_path = restore_vdir.blob_path(&file_id_bytes);
     let blob_data = std::fs::read(&blob_path).expect("read blob");
     veylora::storage::format::verify_file(&blob_data, &file_key).expect("verify restored blob");
+    // The restored blob must decrypt back to the original plaintext —
+    // verify_file alone passes even on a double-encrypted blob (the
+    // re-encryption is internally consistent but yields garbage).
+    let restored =
+        veylora::storage::format::read_range(&blob_data, 0, plaintext.len() as u64, &file_key)
+            .expect("decrypt restored blob");
+    assert_eq!(
+        &restored[..],
+        &plaintext[..],
+        "restored file must decrypt to the original bytes"
+    );
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
     let _ = std::fs::remove_dir_all(&restore_dir);
@@ -289,20 +313,35 @@ fn phase7_backup_history_recorded() {
     let manager = unlock_vault(&db, &mvk, &vdir);
 
     let backup_path = tmp_dir.join("history.vey");
-    create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
-        .expect("create backup");
+    let backup_info =
+        create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+            .expect("create backup");
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64;
-    verify::record_backup_history(&db, backup_path.to_str().unwrap(), "complete", now)
-        .expect("record history");
+    verify::record_backup_history(
+        &db,
+        backup_path.to_str().unwrap(),
+        "complete",
+        backup_info.total_size as i64,
+        now,
+    )
+    .expect("record history");
 
     let history = verify::list_backup_history(&db).expect("list history");
     assert_eq!(history.len(), 1, "should have 1 history entry");
     assert_eq!(history[0].status, "complete", "status should be complete");
     assert_eq!(history[0].created_at_unix, now, "created_at should match");
+    assert!(
+        history[0].backup_size > 0,
+        "history must record the real backup size, not 0"
+    );
+    assert_eq!(
+        history[0].backup_size, backup_info.total_size as i64,
+        "backup_size should match the created backup"
+    );
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
     let _ = manager;
@@ -643,4 +682,144 @@ fn phase7_backup_100mib_roundtrip() {
     let _ = manager;
     let _ = _restore_manager;
     let _ = file_id;
+}
+
+// Test #16: Corrupt trailer — fails AFTER every blob was written. Restore
+// must roll back DB rows AND delete the blobs it wrote (all-or-nothing).
+#[test]
+fn phase7_backup_restore_cleans_up_blobs_on_failure() {
+    let tmp_dir = setup_vault_dir();
+    let (db, mvk, vdir) = create_test_vault(&tmp_dir);
+    add_file_to_vault(&db, &mvk, &vdir, b"test data", "test.txt");
+
+    let manager = unlock_vault(&db, &mvk, &vdir);
+
+    let backup_path = tmp_dir.join("bad-trailer.vey");
+    create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+        .expect("create backup");
+
+    // Corrupt the trailer tag (last 16 bytes): the loop writes every blob
+    // first, then the trailer check fails — the worst moment for cleanup.
+    let mut data = std::fs::read(&backup_path).expect("read backup");
+    let tamper_pos = data.len() - 10;
+    data[tamper_pos] ^= 0x01;
+    std::fs::write(&backup_path, &data).expect("write tampered backup");
+
+    let restore_dir = setup_vault_dir();
+    let (mut restore_db, restore_vdir) = create_restore_vault(&vdir, &restore_dir);
+    let _restore_manager = unlock_vault(&restore_db, &mvk, &restore_vdir);
+
+    let result = restore::restore_backup(
+        mvk.as_bytes(),
+        &mut restore_db,
+        &restore_vdir,
+        backup_path.to_str().unwrap(),
+    );
+    assert!(result.is_err(), "corrupt trailer should fail the restore");
+
+    // No DB rows...
+    let metadata_key = derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY).expect("metadata key");
+    let files = veylora::database::files::list_files(&restore_db, &metadata_key, None)
+        .expect("list restored files");
+    assert_eq!(
+        files.len(),
+        0,
+        "no DB rows should remain after a failed restore"
+    );
+
+    // ...and no blobs left behind from the failed attempt.
+    let leftover: Vec<_> = std::fs::read_dir(&restore_vdir.blobs_dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .collect();
+    assert!(
+        leftover.is_empty(),
+        "blobs written during a failed restore must be deleted, found: {:?}",
+        leftover
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    let _ = std::fs::remove_dir_all(&restore_dir);
+    let _ = manager;
+    let _ = _restore_manager;
+}
+
+// Test #17: Backup must include foldered files (the old root-only listing
+// silently skipped them). Format v1 manifests carry no folder data, so
+// restored files land at the root — and must decrypt to the originals.
+#[test]
+fn phase7_backup_includes_foldered_files() {
+    let tmp_dir = setup_vault_dir();
+    let (db, mvk, vdir) = create_test_vault(&tmp_dir);
+
+    let root_plain: &[u8] = b"root file content";
+    let foldered_plain: &[u8] = b"file inside a folder";
+    add_file_to_vault(&db, &mvk, &vdir, root_plain, "root.txt");
+
+    let metadata_key = derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY).expect("metadata key");
+    let folder_id = veylora::database::folders::insert_folder(&db, &metadata_key, 1, None, "Docs")
+        .expect("insert folder");
+    add_file_in_folder(
+        &db,
+        &mvk,
+        &vdir,
+        foldered_plain,
+        "nested.txt",
+        Some(folder_id),
+    );
+
+    let manager = unlock_vault(&db, &mvk, &vdir);
+
+    let backup_path = tmp_dir.join("folders.vey");
+    let backup_info =
+        create::create_backup(mvk.as_bytes(), &db, &vdir, backup_path.to_str().unwrap())
+            .expect("create backup");
+    assert_eq!(
+        backup_info.file_count, 2,
+        "backup must include the foldered file, not just root files"
+    );
+
+    let restore_dir = setup_vault_dir();
+    let (mut restore_db, restore_vdir) = create_restore_vault(&vdir, &restore_dir);
+    let _restore_manager = unlock_vault(&restore_db, &mvk, &restore_vdir);
+
+    restore::restore_backup(
+        mvk.as_bytes(),
+        &mut restore_db,
+        &restore_vdir,
+        backup_path.to_str().unwrap(),
+    )
+    .expect("restore backup");
+
+    // Both files land at the root (format v1 has no folder data)...
+    let files = veylora::database::files::list_files(&restore_db, &metadata_key, None)
+        .expect("list restored files");
+    assert_eq!(files.len(), 2, "both files should land at the root");
+
+    // ...and each restores byte-for-byte (no double encryption).
+    for (name, expected) in [("root.txt", root_plain), ("nested.txt", foldered_plain)] {
+        let f = files
+            .iter()
+            .find(|f| f.filename == name)
+            .unwrap_or_else(|| panic!("{name} should be restored"));
+        let file_id_bytes: [u8; 16] = hex_decode(&f.file_id).expect("decode file_id");
+        let file_key = veylora::storage::format::FileKey::derive(&mvk, &file_id_bytes)
+            .expect("derive file key");
+        let blob_data =
+            std::fs::read(restore_vdir.blob_path(&file_id_bytes)).expect("read restored blob");
+        let restored =
+            veylora::storage::format::read_range(&blob_data, 0, expected.len() as u64, &file_key)
+                .expect("decrypt restored file");
+        assert_eq!(
+            &restored[..],
+            expected,
+            "{name} must decrypt to the original bytes"
+        );
+    }
+
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+    let _ = std::fs::remove_dir_all(&restore_dir);
+    let _ = manager;
+    let _ = _restore_manager;
 }

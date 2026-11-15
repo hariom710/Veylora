@@ -253,75 +253,67 @@ pub fn list_files(
     metadata_key: &[u8; 32],
     folder_id: Option<u64>,
 ) -> Result<Vec<FileRecord>, DbError> {
-    let mut rows: Vec<FileRow> = Vec::new();
+    let rows = match folder_id {
+        Some(fid) => query_file_rows(db, "WHERE folder_id = ?1", &[&(fid as i64)])?,
+        None => query_file_rows(db, "WHERE folder_id IS NULL", &[])?,
+    };
+    records_from_rows(db, metadata_key, rows)
+}
 
-    match folder_id {
-        Some(fid) => {
-            let mut stmt = db
-                .conn
-                .prepare(
-                    "SELECT vault_id, file_id, filename_nonce, filename_ciphertext,
-                        folder_id, encrypted_size, encryption_version,
-                        created_at_nonce, created_at_ciphertext,
-                        modified_at_nonce, modified_at_ciphertext
-                 FROM encrypted_files WHERE folder_id = ?1",
-                )
-                .map_err(DbError::from)?;
-            let file_rows = stmt
-                .query_map(rusqlite::params![fid as i64], |row| {
-                    Ok((
-                        row.get::<_, i64>(0)? as u64,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, Vec<u8>>(2)?,
-                        row.get::<_, Vec<u8>>(3)?,
-                        row.get::<_, Option<i64>>(4)?.map(|v| v as u64),
-                        row.get::<_, i64>(5)? as u64,
-                        row.get::<_, u32>(6)?,
-                        row.get::<_, Vec<u8>>(7)?,
-                        row.get::<_, Vec<u8>>(8)?,
-                        row.get::<_, Vec<u8>>(9)?,
-                        row.get::<_, Vec<u8>>(10)?,
-                    ))
-                })
-                .map_err(DbError::from)?;
-            for r in file_rows {
-                rows.push(r.map_err(DbError::from)?);
-            }
-        }
-        None => {
-            let mut stmt = db
-                .conn
-                .prepare(
-                    "SELECT vault_id, file_id, filename_nonce, filename_ciphertext,
-                        folder_id, encrypted_size, encryption_version,
-                        created_at_nonce, created_at_ciphertext,
-                        modified_at_nonce, modified_at_ciphertext
-                 FROM encrypted_files WHERE folder_id IS NULL",
-                )
-                .map_err(DbError::from)?;
-            let file_rows = stmt
-                .query_map([], |row| {
-                    Ok((
-                        row.get::<_, i64>(0)? as u64,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, Vec<u8>>(2)?,
-                        row.get::<_, Vec<u8>>(3)?,
-                        row.get::<_, Option<i64>>(4)?.map(|v| v as u64),
-                        row.get::<_, i64>(5)? as u64,
-                        row.get::<_, u32>(6)?,
-                        row.get::<_, Vec<u8>>(7)?,
-                        row.get::<_, Vec<u8>>(8)?,
-                        row.get::<_, Vec<u8>>(9)?,
-                        row.get::<_, Vec<u8>>(10)?,
-                    ))
-                })
-                .map_err(DbError::from)?;
-            for r in file_rows {
-                rows.push(r.map_err(DbError::from)?);
-            }
-        }
+/// List every file in the vault regardless of folder (used by backup — a
+/// root-only listing would silently skip foldered files). Ordered by row id
+/// so backups are deterministic. Format v1 manifests carry no folder data,
+/// so restored files land at the root.
+pub fn list_all_files(db: &Db, metadata_key: &[u8; 32]) -> Result<Vec<FileRecord>, DbError> {
+    let rows = query_file_rows(db, "ORDER BY id", &[])?;
+    records_from_rows(db, metadata_key, rows)
+}
+
+/// Run a SELECT over encrypted_files with an optional trailing filter clause
+/// and collect the raw rows (shared by list_files / list_all_files).
+fn query_file_rows(
+    db: &Db,
+    filter: &str,
+    params: &[&dyn rusqlite::ToSql],
+) -> Result<Vec<FileRow>, DbError> {
+    let sql = format!(
+        "SELECT vault_id, file_id, filename_nonce, filename_ciphertext,
+            folder_id, encrypted_size, encryption_version,
+            created_at_nonce, created_at_ciphertext,
+            modified_at_nonce, modified_at_ciphertext
+     FROM encrypted_files {filter}"
+    );
+    let mut stmt = db.conn.prepare(&sql).map_err(DbError::from)?;
+    let file_rows = stmt
+        .query_map(params, |row| {
+            Ok((
+                row.get::<_, i64>(0)? as u64,
+                row.get::<_, String>(1)?,
+                row.get::<_, Vec<u8>>(2)?,
+                row.get::<_, Vec<u8>>(3)?,
+                row.get::<_, Option<i64>>(4)?.map(|v| v as u64),
+                row.get::<_, i64>(5)? as u64,
+                row.get::<_, u32>(6)?,
+                row.get::<_, Vec<u8>>(7)?,
+                row.get::<_, Vec<u8>>(8)?,
+                row.get::<_, Vec<u8>>(9)?,
+                row.get::<_, Vec<u8>>(10)?,
+            ))
+        })
+        .map_err(DbError::from)?;
+    let mut rows = Vec::new();
+    for r in file_rows {
+        rows.push(r.map_err(DbError::from)?);
     }
+    Ok(rows)
+}
 
+/// Decrypt raw rows into FileRecords (shared conversion for all listings).
+fn records_from_rows(
+    db: &Db,
+    metadata_key: &[u8; 32],
+    rows: Vec<FileRow>,
+) -> Result<Vec<FileRecord>, DbError> {
     let mut records = Vec::new();
     for (
         vault_id,

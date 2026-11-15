@@ -475,11 +475,13 @@ pub fn vault_backup_create(
 
     let bi = inner_result.map_err(|e| e.to_string())?;
 
-    // Record in backup history.
+    // Record in backup history (best-effort: a history write failure must
+    // not fail the backup that already succeeded on disk).
     let _ = crate::backup::verify::record_backup_history(
         &db,
         &dest_path,
         "complete",
+        bi.total_size as i64,
         bi.created_at_unix,
     );
 

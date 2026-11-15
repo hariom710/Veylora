@@ -1,5 +1,33 @@
 # Veylora Release Notes
 
+## v1.0.4 (2026-11-15)
+
+Final correctness pass (audit follow-up):
+
+- **Restore no longer corrupts file contents**: the restore path re-encrypted
+  blobs on the way in (the backup container already holds final format-v1
+  bytes), so restored files decrypted to garbage even though verification
+  passed — verification is internally consistent on double-encrypted data.
+  Blobs are now stored verbatim, and the round-trip tests read the plaintext
+  back to prove it.
+  > ⚠️ **If you restored a backup with Veylora ≤ v1.0.3, the restored files
+  > were unreadable.** The backup files themselves were never affected —
+  > restore the same backup again with v1.0.4.
+- **A failed restore cleans up after itself**: blobs written before the
+  failure (e.g. a corrupt trailer detected at the very end) are deleted along
+  with the rolled-back rows — the all-or-nothing contract now covers disk
+  state too, not just the database.
+- **Backups include files inside folders**: the listing used to build a
+  backup was root-only, so foldered files were silently skipped. (Format v1
+  manifests carry no folder data — restored files land at the vault root.)
+- **Backup history records the real size**: entries stored `0` in both size
+  columns; they now record the backup payload size and expose it to the UI.
+- **The `vault://` streaming handler serves real plaintext**: it returned
+  deterministic dummy bytes and accepted 32-byte file ids that no import ever
+  mints. It now decrypts for real with per-chunk authentication (aborts on a
+  tampered chunk) using the same 16-byte ids as `file_import` — matching the
+  production preview path.
+
 ## v1.0.3 (2026-11-14)
 
 Hardening pass over the app's implicit state machines (audit follow-up):

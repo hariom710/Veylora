@@ -202,7 +202,8 @@ pub fn list_backup_history(db: &Db) -> Result<Vec<crate::backup::BackupHistoryEn
     let mut stmt = db
         .conn()
         .prepare(
-            "SELECT backup_path, status, created_at FROM backup_history ORDER BY created_at DESC",
+            "SELECT backup_path, status, created_at, backup_size
+             FROM backup_history ORDER BY created_at DESC",
         )
         .map_err(|e| BackupError::Internal(e.to_string()))?;
 
@@ -212,6 +213,7 @@ pub fn list_backup_history(db: &Db) -> Result<Vec<crate::backup::BackupHistoryEn
                 path: row.get(0)?,
                 status: row.get(1)?,
                 created_at_unix: row.get(2)?,
+                backup_size: row.get(3)?,
             })
         })
         .map_err(|e| BackupError::Internal(e.to_string()))?;
@@ -224,17 +226,23 @@ pub fn list_backup_history(db: &Db) -> Result<Vec<crate::backup::BackupHistoryEn
 }
 
 /// Record a backup completion in the history table.
+///
+/// `backup_size` is the backup payload size (BackupInfo::total_size); it is
+/// written to both the v1 `encrypted_size` column and the v3 `backup_size`
+/// column so rows are readable on pre-v3 databases too. `verified` stays 0 —
+/// verification is a separate step that may run later.
 pub fn record_backup_history(
     db: &Db,
     path: &str,
     _status: &str,
+    backup_size: i64,
     created_at_unix: i64,
 ) -> Result<()> {
     db.conn()
         .execute(
-            "INSERT INTO backup_history (created_at, backup_path, encrypted_size, verified, status)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![created_at_unix, path, 0, 0, _status],
+            "INSERT INTO backup_history (created_at, backup_path, encrypted_size, verified, status, backup_size)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![created_at_unix, path, backup_size, 0, _status, backup_size],
         )
         .map_err(|e| BackupError::Internal(e.to_string()))?;
     Ok(())

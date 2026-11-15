@@ -12,7 +12,7 @@
 [![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)](https://vite.dev)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![Rust](https://img.shields.io/badge/Rust-1.100-000000?logo=rust&logoColor=white)](https://www.rust-lang.org)
-[![Tests](https://img.shields.io/badge/tests-169%20Rust%20%C2%B7%2072%20Frontend-brightgreen)](#-testing-and-verification)
+[![Tests](https://img.shields.io/badge/tests-177%20Rust%20%C2%B7%2076%20Frontend-brightgreen)](#-testing-and-verification)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078D6?logo=windows11&logoColor=white)](#-installation)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-green)](#-license)
 
@@ -34,7 +34,7 @@
 
 **Why Rust + Tauri.** Key material lives in RAM, so the platform matters. Rust gives memory safety plus zero-cost `zeroize` (keys are wiped the instant the vault locks); the RustCrypto crates supply Argon2id, XChaCha20-Poly1305 and HKDF with no C toolchain; `rusqlite` bundles SQLite so there is no system dependency. Tauri keeps the shell tiny — the installer is ~4.3 MB and the UI runs on Windows' preinstalled WebView2 instead of a bundled browser.
 
-**Maturity.** This is a **functional v1.0.3 suitable for personal use**: the NSIS installer builds, installs and launches; **175 Rust + 76 frontend tests pass**; and a full packaged-app smoke run (first-run wipe → login → vault creation → recovery → import → viewer render → lock → keypad unlock → dashboard counts) exits green on the final artifact. The security review is **internal** ([`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md)), not an external audit; the installer is unsigned; and known issues are listed under [Limitations](#-limitations-and-known-issues).
+**Maturity.** This is a **functional v1.0.4 suitable for personal use**: the NSIS installer builds, installs and launches; **177 Rust + 76 frontend tests pass**; and a full packaged-app smoke run (first-run wipe → login → vault creation → recovery → import → viewer render → lock → keypad unlock → dashboard counts) exits green on the final artifact. The security review is **internal** ([`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md)), not an external audit; the installer is unsigned; and known issues are listed under [Limitations](#-limitations-and-known-issues).
 
 **Deliberately out of scope:** cloud sync, incremental backup, and an auto-backup scheduler. Veylora is local-only by design.
 
@@ -106,7 +106,7 @@
 | [getrandom](https://docs.rs/getrandom) | 0.2 | OS CSPRNG for all key material | Runtime |
 | [rusqlite](https://docs.rs/rusqlite) (bundled) | 0.41 | Metadata DB (WAL + `synchronous=FULL`) | Runtime |
 | serde / serde_json | 1 | (De)serialization | Runtime |
-| [Vitest](https://vitest.dev) + jsdom | ^5.1 | Frontend tests (72) | Test |
+| [Vitest](https://vitest.dev) + jsdom | ^5.1 | Frontend tests (76) | Test |
 | Node.js / pnpm | v22.21.1 / 8.15.9 | Tooling, build scripts | Build |
 | NSIS (via Tauri bundler) | — | Per-user Windows installer | Build |
 
@@ -195,13 +195,13 @@ docs/                     ARCHITECTURE, CRYPTO_DESIGN, SECURITY_REVIEW,
 The production build produces a per-user NSIS installer (no admin rights required):
 
 ```
-src-tauri\target\release\bundle\nsis\Veylora_1.0.3_x64-setup.exe   (~4.3 MB)
+src-tauri\target\release\bundle\nsis\Veylora_1.0.4_x64-setup.exe   (~4.3 MB)
 ```
 
 > This is a **local build output path**. Published releases land on the GitHub Releases page, where each release description prints the expected **SHA-256** of the attached installer (also shipped as a `.sha256` sidecar) — always verify it before running:
 >
 > ```powershell
-> certutil -hashfile Veylora_1.0.3_x64-setup.exe SHA256
+> certutil -hashfile Veylora_1.0.4_x64-setup.exe SHA256
 > ```
 
 From v1.0.1 the app can also update itself: **Settings → About → Check for updates** downloads the newer signed build from GitHub Releases and installs it (the signature is verified against the release key embedded in the app before anything runs).
@@ -240,7 +240,7 @@ Quality checks (run from the repository root):
 ```powershell
 pnpm typecheck            # tsc --noEmit — must report 0 errors
 pnpm test                 # 76 frontend tests (Vitest + jsdom)
-build.bat test            # 169 Rust tests, via the MSVC environment wrapper
+build.bat test            # 177 Rust tests, via the MSVC environment wrapper
 pnpm build                # production frontend bundle
 build.bat tauri build     # release binary + NSIS installer (signed updater artifacts)
 ```
@@ -310,16 +310,16 @@ Veylora is a **fully local application**: no accounts on any server, no analytic
 
 ## 🧪 Testing and verification
 
-Results from the full verification run (12–13 November 2026, Windows x64) - all freshly executed, none historical:
+Results from the full verification run (12–14 November 2026, Windows x64) - all freshly executed, none historical:
 
 | Check | Result | Coverage limitation |
 |---|---|---|
-| `pnpm test` | **70/70 passed** (16 files) | jsdom component + unit tests; real-browser E2E covered by the packaged smoke row below |
-| `cargo test` | **169 passed, 0 failed, 2 ignored** | Offline and deterministic by design |
+| `pnpm test` | **76/76 passed** (16 files) | jsdom component + unit tests; real-browser E2E covered by the packaged smoke row below |
+| `cargo test` | **177 passed, 0 failed, 2 ignored** | Offline and deterministic by design |
 | `pnpm typecheck` (`tsc --noEmit`) | **0 errors** (193 latent errors were hidden behind a broken config flag) | — |
 | CI (`.github/workflows/ci.yml`) | Frontend: typecheck + lint + tests + build (Ubuntu); Rust: `fmt --check` + clippy `-D warnings` + tests; Windows: full packaged build **+ installed-app CDP smoke (browser E2E)** | — |
 | Packaged-app smoke (WebView2 CDP automation) | **Exit 0** on the final installer — first-run wipe → login → create vault → recovery → import → image viewer renders (64×64) → `vault://` fetch returns 200 → lock → keypad unlock → dashboard shows `1 files encrypted \| Storage: 494 B` | Committed as [`scripts/smoke.ps1`](scripts/smoke.ps1) (parameterized exe path, vault, creds, port, shot dir; asserts and non-zero exit on failure); CI sets `VEYLORA_CDP_PORT` so production launches do not expose CDP |
-| Installer SHA-256 | `C2FAA1E4…C7337` for the locally verified build; each GitHub Release prints the hash of the asset it ships (plus a `.sha256` sidecar) | — |
+| Installer SHA-256 | Each GitHub Release prints the hash of the asset it ships (plus a `.sha256` sidecar); verify locally with `certutil -hashfile Veylora_1.0.4_x64-setup.exe SHA256` | — |
 | Icon embedding | Verified by extracting the icon from **both** the built and the installed exe | Manual |
 | Test-data hygiene | Test vault and WebView2 localStorage wiped after every smoke run | — |
 

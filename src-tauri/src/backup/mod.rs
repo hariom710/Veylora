@@ -62,4 +62,6 @@ pub struct BackupHistoryEntry {
     pub path: String,
     pub status: String,
     pub created_at_unix: i64,
+    /// Backup payload size in bytes (0 on rows written before v1.0.4).
+    pub backup_size: i64,
 }

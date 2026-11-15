@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use crate::crypto::hkdf::{LABEL_BACKUP_KEY, LABEL_METADATA_KEY};
 use crate::crypto::mvk::Mvk;
 use crate::database::Db;
-use crate::storage::blob::write_blob;
+use crate::storage::blob::store_blob_raw;
 use crate::storage::format::{verify_file, FileKey};
 use crate::storage::vault_dir::VaultDir;
 use rusqlite::OptionalExtension;
@@ -85,91 +85,90 @@ pub fn restore_backup(
         ));
     }
 
-    // 5. Start a DB transaction for all-or-nothing restore.
-    let mut files_restored: u64 = 0;
-    let mut bytes_written: u64 = 0;
-    let mut restored_file_ids: Vec<String> = Vec::new();
+    // 5. All-or-nothing attempt: blobs land on disk before tx.commit, so
+    // the whole restore runs in one closure — on any failure the tx is
+    // dropped (rows roll back) and the blobs written so far are deleted.
     let mut restored_blob_paths: Vec<std::path::PathBuf> = Vec::new();
 
-    let tx = db
-        .conn_mut()
-        .transaction()
-        .map_err(|e| BackupError::Internal(e.to_string()))?;
+    let outcome = (|| -> Result<(u64, u64)> {
+        let mut files_restored: u64 = 0;
+        let mut bytes_written: u64 = 0;
 
-    for entry in &manifest.entries {
-        // Check for duplicate file_id.
-        let existing: Option<i64> = tx
-            .query_row(
-                "SELECT id FROM encrypted_files WHERE file_id = ?1",
-                rusqlite::params![hex_encode(&entry.file_id)],
-                |row| row.get(0),
+        let tx = db
+            .conn_mut()
+            .transaction()
+            .map_err(|e| BackupError::Internal(e.to_string()))?;
+
+        for entry in &manifest.entries {
+            // Check for duplicate file_id.
+            let existing: Option<i64> = tx
+                .query_row(
+                    "SELECT id FROM encrypted_files WHERE file_id = ?1",
+                    rusqlite::params![hex_encode(&entry.file_id)],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|e| BackupError::Internal(e.to_string()))?;
+            if existing.is_some() {
+                return Err(BackupError::FileExists {
+                    file_id: hex_encode(&entry.file_id),
+                });
+            }
+
+            // Read encrypted blob bytes from the backup container.
+            let mut blob_data = vec![0u8; entry.encrypted_size as usize];
+            cursor
+                .read_exact(&mut blob_data)
+                .map_err(|e| BackupError::InvalidContainer(format!("bad blob read: {e}")))?;
+
+            // Verify the blob with format v1 (validates chunk chain + finalize).
+            let file_key = FileKey::derive(&Mvk::from_array(*mvk), &entry.file_id)
+                .map_err(|e| BackupError::Internal(e.to_string()))?;
+            verify_file(&blob_data, &file_key).map_err(|e| {
+                BackupError::Corrupted(format!(
+                    "blob verification failed for {}: {e}",
+                    hex_encode(&entry.file_id)
+                ))
+            })?;
+
+            // Store the container's format-v1 bytes verbatim — they are already
+            // the final on-disk blob (write_blob would encrypt them a second
+            // time and produce an unreadable file).
+            let stored = store_blob_raw(&vdir.root, &entry.file_id, &blob_data)
+                .map_err(|e| BackupError::Internal(e.to_string()))?;
+            bytes_written += stored;
+
+            restored_blob_paths.push(vdir.blob_path(&entry.file_id));
+
+            // Insert DB row.
+            // Encrypt filename with metadata-key for the new row_id.
+            // We insert with row_id 0 first, then re-encrypt with the real row_id.
+            let (fn_nonce, fn_cipher) = crate::database::crypto::encrypt_meta(
+                &metadata_key,
+                "encrypted_files",
+                0,
+                "filename",
+                entry.name.as_bytes(),
             )
-            .optional()
             .map_err(|e| BackupError::Internal(e.to_string()))?;
-        if existing.is_some() {
-            return Err(BackupError::FileExists {
-                file_id: hex_encode(&entry.file_id),
-            });
-        }
-
-        // Read encrypted blob bytes from the backup container.
-        let mut blob_data = vec![0u8; entry.encrypted_size as usize];
-        cursor
-            .read_exact(&mut blob_data)
-            .map_err(|e| BackupError::InvalidContainer(format!("bad blob read: {e}")))?;
-
-        // Verify the blob with format v1 (validates chunk chain + finalize).
-        let file_key = FileKey::derive(&Mvk::from_array(*mvk), &entry.file_id)
+            let (ca_nonce, ca_cipher) = crate::database::crypto::encrypt_meta(
+                &metadata_key,
+                "encrypted_files",
+                0,
+                "created_at",
+                entry.created_at.to_string().as_bytes(),
+            )
             .map_err(|e| BackupError::Internal(e.to_string()))?;
-        verify_file(&blob_data, &file_key).map_err(|e| {
-            BackupError::Corrupted(format!(
-                "blob verification failed for {}: {e}",
-                hex_encode(&entry.file_id)
-            ))
-        })?;
+            let (ma_nonce, ma_cipher) = crate::database::crypto::encrypt_meta(
+                &metadata_key,
+                "encrypted_files",
+                0,
+                "modified_at",
+                entry.modified_at.to_string().as_bytes(),
+            )
+            .map_err(|e| BackupError::Internal(e.to_string()))?;
 
-        // Write blob atomically.
-        let encrypted_size = write_blob(
-            &vdir.root,
-            &entry.file_id,
-            &mut blob_data.as_slice(),
-            &file_key,
-        )
-        .map_err(|e| BackupError::Internal(e.to_string()))?;
-        bytes_written += encrypted_size;
-
-        let blob_path = vdir.blob_path(&entry.file_id);
-        restored_blob_paths.push(blob_path);
-
-        // Insert DB row.
-        // Encrypt filename with metadata-key for the new row_id.
-        // We insert with row_id 0 first, then re-encrypt with the real row_id.
-        let (fn_nonce, fn_cipher) = crate::database::crypto::encrypt_meta(
-            &metadata_key,
-            "encrypted_files",
-            0,
-            "filename",
-            entry.name.as_bytes(),
-        )
-        .map_err(|e| BackupError::Internal(e.to_string()))?;
-        let (ca_nonce, ca_cipher) = crate::database::crypto::encrypt_meta(
-            &metadata_key,
-            "encrypted_files",
-            0,
-            "created_at",
-            entry.created_at.to_string().as_bytes(),
-        )
-        .map_err(|e| BackupError::Internal(e.to_string()))?;
-        let (ma_nonce, ma_cipher) = crate::database::crypto::encrypt_meta(
-            &metadata_key,
-            "encrypted_files",
-            0,
-            "modified_at",
-            entry.modified_at.to_string().as_bytes(),
-        )
-        .map_err(|e| BackupError::Internal(e.to_string()))?;
-
-        tx.execute(
+            tx.execute(
             "INSERT INTO encrypted_files (vault_id, file_id, filename_nonce, filename_ciphertext,
                 folder_id, encrypted_size, encryption_version,
                 created_at_nonce, created_at_ciphertext, modified_at_nonce, modified_at_ciphertext)
@@ -190,70 +189,86 @@ pub fn restore_backup(
         )
         .map_err(|e| BackupError::Internal(e.to_string()))?;
 
-        // Get the new row id and re-encrypt with correct row_id in AAD.
-        let id: i64 = tx
-            .query_row("SELECT last_insert_rowid()", [], |row| row.get(0))
+            // Get the new row id and re-encrypt with correct row_id in AAD.
+            let id: i64 = tx
+                .query_row("SELECT last_insert_rowid()", [], |row| row.get(0))
+                .map_err(|e| BackupError::Internal(e.to_string()))?;
+
+            let (fn_nonce, fn_cipher) = crate::database::crypto::encrypt_meta(
+                &metadata_key,
+                "encrypted_files",
+                id as u64,
+                "filename",
+                entry.name.as_bytes(),
+            )
+            .map_err(|e| BackupError::Internal(e.to_string()))?;
+            let (ca_nonce, ca_cipher) = crate::database::crypto::encrypt_meta(
+                &metadata_key,
+                "encrypted_files",
+                id as u64,
+                "created_at",
+                entry.created_at.to_string().as_bytes(),
+            )
+            .map_err(|e| BackupError::Internal(e.to_string()))?;
+            let (ma_nonce, ma_cipher) = crate::database::crypto::encrypt_meta(
+                &metadata_key,
+                "encrypted_files",
+                id as u64,
+                "modified_at",
+                entry.modified_at.to_string().as_bytes(),
+            )
             .map_err(|e| BackupError::Internal(e.to_string()))?;
 
-        let (fn_nonce, fn_cipher) = crate::database::crypto::encrypt_meta(
-            &metadata_key,
-            "encrypted_files",
-            id as u64,
-            "filename",
-            entry.name.as_bytes(),
-        )
-        .map_err(|e| BackupError::Internal(e.to_string()))?;
-        let (ca_nonce, ca_cipher) = crate::database::crypto::encrypt_meta(
-            &metadata_key,
-            "encrypted_files",
-            id as u64,
-            "created_at",
-            entry.created_at.to_string().as_bytes(),
-        )
-        .map_err(|e| BackupError::Internal(e.to_string()))?;
-        let (ma_nonce, ma_cipher) = crate::database::crypto::encrypt_meta(
-            &metadata_key,
-            "encrypted_files",
-            id as u64,
-            "modified_at",
-            entry.modified_at.to_string().as_bytes(),
-        )
-        .map_err(|e| BackupError::Internal(e.to_string()))?;
-
-        tx.execute(
-            "UPDATE encrypted_files
+            tx.execute(
+                "UPDATE encrypted_files
              SET filename_nonce = ?2, filename_ciphertext = ?3,
                  created_at_nonce = ?4, created_at_ciphertext = ?5,
                  modified_at_nonce = ?6, modified_at_ciphertext = ?7
              WHERE id = ?1",
-            rusqlite::params![id, fn_nonce, fn_cipher, ca_nonce, ca_cipher, ma_nonce, ma_cipher,],
-        )
-        .map_err(|e| BackupError::Internal(e.to_string()))?;
+                rusqlite::params![
+                    id, fn_nonce, fn_cipher, ca_nonce, ca_cipher, ma_nonce, ma_cipher,
+                ],
+            )
+            .map_err(|e| BackupError::Internal(e.to_string()))?;
 
-        restored_file_ids.push(hex_encode(&entry.file_id));
-        files_restored += 1;
+            files_restored += 1;
+        }
+        // 6. Verify trailer — still inside the attempt: a bad trailer must
+        // roll back the rows and remove the blobs already written.
+        let trailer_data = &data[trailer_start..];
+        let trailer_nonce = derive_backup_nonce(&backup_key, b"trailer-nonce")?;
+        let trailer =
+            container::TrailerRegion::read(&mut &trailer_data[..], &backup_key, &trailer_nonce)?;
+
+        if trailer.file_count != manifest.entries.len() as u64 {
+            return Err(BackupError::Corrupted(
+                "trailer file count mismatch".to_string(),
+            ));
+        }
+
+        // Commit the transaction (rows and blobs now agree).
+        tx.commit()
+            .map_err(|e| BackupError::Internal(e.to_string()))?;
+
+        Ok((files_restored, bytes_written))
+    })();
+
+    match outcome {
+        Ok((files_restored, bytes_written)) => Ok(RestoreInfo {
+            files_restored,
+            bytes_written,
+        }),
+        Err(e) => {
+            // The tx dropped uncommitted (rows rolled back); delete the
+            // blobs this attempt wrote. Best-effort: a leftover final-named
+            // blob has no DB row, so the row-existence gate blocks serving.
+            for path in &restored_blob_paths {
+                let _ = std::fs::remove_file(path);
+            }
+            let _ = crate::storage::vault_dir::fsync_dir(&vdir.blobs_dir);
+            Err(e)
+        }
     }
-
-    // 6. Verify trailer.
-    let trailer_data = &data[trailer_start..];
-    let trailer_nonce = derive_backup_nonce(&backup_key, b"trailer-nonce")?;
-    let trailer =
-        container::TrailerRegion::read(&mut &trailer_data[..], &backup_key, &trailer_nonce)?;
-
-    if trailer.file_count != manifest.entries.len() as u64 {
-        return Err(BackupError::Corrupted(
-            "trailer file count mismatch".to_string(),
-        ));
-    }
-
-    // Commit the transaction.
-    tx.commit()
-        .map_err(|e| BackupError::Internal(e.to_string()))?;
-
-    Ok(RestoreInfo {
-        files_restored,
-        bytes_written,
-    })
 }
 
 fn hex_encode(bytes: &[u8]) -> String {

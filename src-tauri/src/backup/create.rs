@@ -61,8 +61,9 @@ pub fn create_backup(
         crate::crypto::hkdf::derive_subkey(mvk, crate::crypto::hkdf::LABEL_METADATA_KEY)
             .map_err(|e| BackupError::Internal(e.to_string()))?;
 
-    // List all files from the DB.
-    let files = crate::database::files::list_files(db, &metadata_key, None)
+    // List every file: backups must include foldered files too (a root-only
+    // listing would silently drop them).
+    let files = crate::database::files::list_all_files(db, &metadata_key)
         .map_err(|e| BackupError::Internal(e.to_string()))?;
 
     let manifest_nonce = derive_backup_nonce(&backup_key, b"manifest-nonce")?;

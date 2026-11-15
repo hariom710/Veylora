@@ -55,11 +55,20 @@ fn create_test_vault(tmp_dir: &std::path::Path) -> (Db, Mvk, [u8; 32], VaultDir)
     (db, mvk, mvk_bytes, vdir)
 }
 
-fn create_test_file(db: &Db, mvk: &[u8; 32], plaintext: &[u8], filename: &str) -> String {
-    let metadata_key = veylora::crypto::hkdf::derive_subkey(mvk, LABEL_METADATA_KEY)
+/// Create a test file record plus its real format-v1 encrypted blob.
+/// Returns the hex-encoded file_id string (32 hex chars = 16 bytes).
+fn create_test_file(
+    db: &Db,
+    mvk: &Mvk,
+    vdir: &VaultDir,
+    plaintext: &[u8],
+    filename: &str,
+) -> String {
+    let metadata_key = veylora::crypto::hkdf::derive_subkey(mvk.as_bytes(), LABEL_METADATA_KEY)
         .expect("metadata key derivation failed");
 
-    let file_id_bytes = *Mvk::generate().expect("MVK generation").as_bytes();
+    let mut file_id_bytes = [0u8; 16];
+    getrandom::getrandom(&mut file_id_bytes).expect("file_id RNG");
     let file_id_hex = hex_encode(&file_id_bytes);
 
     veylora::database::files::insert_file(
@@ -73,6 +82,13 @@ fn create_test_file(db: &Db, mvk: &[u8; 32], plaintext: &[u8], filename: &str) -
     )
     .expect("insert file");
 
+    // The protocol handler must decrypt real bytes — write the actual blob.
+    let file_key =
+        veylora::storage::format::FileKey::derive(mvk, &file_id_bytes).expect("derive file key");
+    let mut reader = std::io::Cursor::new(plaintext);
+    veylora::storage::blob::write_blob(&vdir.root, &file_id_bytes, &mut reader, &file_key)
+        .expect("write blob");
+
     file_id_hex
 }
 
@@ -84,23 +100,13 @@ fn unlock_vault(_db: &Db, mvk: &Mvk, vdir: &VaultDir) -> (SessionManager, String
     (manager, token)
 }
 
-/// Returns expected dummy chunk data for a given chunk index and byte range.
-/// decrypt_chunk generates: (chunk_index * 65536 + byte_offset) % 256
-fn expected_chunk_data(chunk_index: u64, start: u64, end: u64) -> Vec<u8> {
-    let mut data = Vec::new();
-    for i in start..=end {
-        data.push(((chunk_index * 65536 + i) % 256) as u8);
-    }
-    data
-}
-
 #[test]
 fn phase6_protocol_handler_serves_file_bytes() {
     let tmp_dir = setup_vault_dir();
-    let (db, mvk, mvk_bytes, vdir) = create_test_vault(&tmp_dir);
+    let (db, mvk, _mvk_bytes, vdir) = create_test_vault(&tmp_dir);
 
     let plaintext = b"Hello World this is a test file for veylora phase6";
-    let file_id_hex = create_test_file(&db, &mvk_bytes, plaintext, "test.txt");
+    let file_id_hex = create_test_file(&db, &mvk, &vdir, plaintext, "test.txt");
 
     let (manager, token) = unlock_vault(&db, &mvk, &vdir);
 
@@ -120,18 +126,20 @@ fn phase6_protocol_handler_serves_file_bytes() {
 
     assert_eq!(response.status(), 200);
     let body = response.body();
-    // Chunk 0 bytes 0-48: (0 * 65536 + i) % 256 for i in 0..48
-    let expected = expected_chunk_data(0, 0, (plaintext.len() - 1) as u64);
-    assert_eq!(body, &expected, "should return deterministic chunk data");
+    assert_eq!(
+        body,
+        &plaintext[..],
+        "should return the real decrypted plaintext"
+    );
 }
 
 #[test]
 fn phase6_protocol_handler_range_request() {
     let tmp_dir = setup_vault_dir();
-    let (db, mvk, mvk_bytes, vdir) = create_test_vault(&tmp_dir);
+    let (db, mvk, _mvk_bytes, vdir) = create_test_vault(&tmp_dir);
 
     let plaintext = b"0123456789abcdef0123456789abcdef0123456789abcdef";
-    let file_id_hex = create_test_file(&db, &mvk_bytes, plaintext, "test.txt");
+    let file_id_hex = create_test_file(&db, &mvk, &vdir, plaintext, "test.txt");
 
     let (manager, token) = unlock_vault(&db, &mvk, &vdir);
 
@@ -146,18 +154,20 @@ fn phase6_protocol_handler_range_request() {
 
     assert_eq!(response.status(), 200);
     let body = response.body();
-    // Chunk 0 bytes 4-8: (0 * 65536 + i) % 256 for i in 4..8
-    let expected = expected_chunk_data(0, 4, 8);
-    assert_eq!(body, &expected, "should return bytes 4-8 from chunk 0");
+    assert_eq!(
+        body,
+        &plaintext[4..9],
+        "should return bytes 4-8 of the file"
+    );
 }
 
 #[test]
 fn phase6_protocol_handler_locked_session_rejects() {
     let tmp_dir = setup_vault_dir();
-    let (db, _mvk, mvk_bytes, vdir) = create_test_vault(&tmp_dir);
+    let (db, mvk, _mvk_bytes, vdir) = create_test_vault(&tmp_dir);
 
     let plaintext = b"secret data";
-    let file_id_hex = create_test_file(&db, &mvk_bytes, plaintext, "test.txt");
+    let file_id_hex = create_test_file(&db, &mvk, &vdir, plaintext, "test.txt");
 
     let manager = SessionManager::new(); // locked by default
 
@@ -186,7 +196,7 @@ fn phase6_protocol_handler_unknown_file_id() {
     let (manager, token) = unlock_vault(&db, &mvk, &vdir);
 
     let url = format!(
-        "vault://file/0000000000000000000000000000000000000000000000000000000000000000?token={}&range=0-10",
+        "vault://file/00000000000000000000000000000000?token={}&range=0-10",
         token
     );
 
@@ -203,10 +213,10 @@ fn phase6_protocol_handler_unknown_file_id() {
 #[test]
 fn phase6_protocol_handler_mid_stream_lock_aborts() {
     let tmp_dir = setup_vault_dir();
-    let (db, mvk, mvk_bytes, vdir) = create_test_vault(&tmp_dir);
+    let (db, mvk, _mvk_bytes, vdir) = create_test_vault(&tmp_dir);
 
     let plaintext = b"multi chunk test data";
-    let file_id_hex = create_test_file(&db, &mvk_bytes, plaintext, "multi_chunk.txt");
+    let file_id_hex = create_test_file(&db, &mvk, &vdir, plaintext, "multi_chunk.txt");
 
     let (manager, token) = unlock_vault(&db, &mvk, &vdir);
 
@@ -244,10 +254,10 @@ fn phase6_protocol_handler_mid_stream_lock_aborts() {
 #[test]
 fn phase6_e2e_lock_invalidates_token_unlock_rotates() {
     let tmp_dir = setup_vault_dir();
-    let (db, mvk, mvk_bytes, vdir) = create_test_vault(&tmp_dir);
+    let (db, mvk, _mvk_bytes, vdir) = create_test_vault(&tmp_dir);
 
     let plaintext = b"e2e test file content for phase6";
-    let file_id_hex = create_test_file(&db, &mvk_bytes, plaintext, "e2e.txt");
+    let file_id_hex = create_test_file(&db, &mvk, &vdir, plaintext, "e2e.txt");
 
     // --- First unlock ---
     let (manager, token1) = unlock_vault(&db, &mvk, &vdir);
@@ -268,10 +278,9 @@ fn phase6_e2e_lock_invalidates_token_unlock_rotates() {
         200,
         "first fetch should succeed with token1"
     );
-    let expected = expected_chunk_data(0, 0, (plaintext.len() - 1) as u64);
     assert_eq!(
         response.body(),
-        &expected,
+        &plaintext[..],
         "body should match plaintext with token1"
     );
 
@@ -320,7 +329,7 @@ fn phase6_e2e_lock_invalidates_token_unlock_rotates() {
     );
     assert_eq!(
         response3.body(),
-        &expected,
+        &plaintext[..],
         "body should match plaintext with token2"
     );
 }

@@ -109,6 +109,8 @@ export interface BackupHistoryEntry {
   path: string;
   status: string;
   created_at_unix: number;
+  /** Backup payload size in bytes; absent on rows written before v1.0.4. */
+  backup_size?: number;
 }
 
 /** Human-readable text for an IPC error; only `Internal` carries a message. */

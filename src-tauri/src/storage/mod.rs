@@ -8,7 +8,9 @@ pub mod crash;
 pub mod format;
 pub mod vault_dir;
 
-pub use blob::{cleanup_tmp_files, delete_blob, list_blobs, read_blob, write_blob, BlobError};
+pub use blob::{
+    cleanup_tmp_files, delete_blob, list_blobs, read_blob, store_blob_raw, write_blob, BlobError,
+};
 pub use crash::{startup_scan, CrashError, ScanReport};
 pub use format::{
     read_range, verify_file, write_file, FileKey, FormatError, Result, CHUNK_SIZE, MAGIC, VERSION,
